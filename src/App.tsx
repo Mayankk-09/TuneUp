@@ -137,7 +137,7 @@ export default function App() {
     }
 
     try {
-      const res = await fetch('http://localhost:5000/api/users/stats', {
+      const res = await fetch('https://tuneup-fb4s.onrender.com//api/users/stats', {
         method: 'POST',
         headers,
         body: JSON.stringify({

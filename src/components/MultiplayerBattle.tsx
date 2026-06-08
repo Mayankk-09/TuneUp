@@ -102,7 +102,7 @@ export const MultiplayerBattle: React.FC<MultiplayerBattleProps> = ({ user, onBa
 
     // Initialize socket connection
     if (!socketRef.current) {
-      socketRef.current = io('http://localhost:5000', {
+      socketRef.current = io('https://tuneup-fb4s.onrender.com/', {
         transports: ['websocket'],
         timeout: 5000
       });
