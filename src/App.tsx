@@ -17,12 +17,7 @@ import { playUIClick, playUIBack, playIntroChime } from './utils/audioSynth';
 import { FloatingMusicParticles } from './components/FloatingMusicParticles';
 import { Mascot } from './components/Mascot';
 
-// =========================================================================
-// BACKGROUND MUSIC CONFIGURATION
-// Paste your background music audio file URL in the quotes below!
-// Example: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
-// =========================================================================
-const BACKGROUND_MUSIC_URL = "";
+const BACKGROUND_MUSIC_URL = "/music/background_music.mp3";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'sandbox' | 'jambuddy' | 'multiplayer' | 'profile'>('dashboard');
