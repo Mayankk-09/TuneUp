@@ -11,13 +11,17 @@ interface SidebarProps {
   onViewChange: (view: ActiveView) => void;
   user: { username: string; xp: number; streak: number } | null;
   onLogout: () => void;
+  theme: 'light' | 'dark';
+  onThemeToggle: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activeView,
   onViewChange,
   user,
-  onLogout
+  onLogout,
+  theme,
+  onThemeToggle
 }) => {
   const menuItems = [
     { id: 'dashboard' as const, label: 'Dashboard', icon: LayoutDashboard, color: 'var(--neon-cyan)' },
@@ -52,7 +56,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         }}>
           T
         </div>
-        <span className="label" style={{ fontSize: '1.5rem', fontWeight: 900, letterSpacing: '-0.5px', color: '#fff' }}>
+        <span className="label" style={{ fontSize: '1.5rem', fontWeight: 900, letterSpacing: '-0.5px', color: 'var(--text-light)' }}>
           une<span style={{ color: 'var(--primary)' }}>Up</span>
         </span>
       </div>
@@ -74,6 +78,45 @@ export const Sidebar: React.FC<SidebarProps> = ({
           );
         })}
       </nav>
+
+      {/* Theme Toggle Button */}
+      <div style={{ width: '100%', padding: '0.25rem 0' }} className="sidebar-theme-toggle-container">
+        <button
+          onClick={() => { playUIClick(); onThemeToggle(); }}
+          className="sidebar-footer-btn"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75rem',
+            width: '100%',
+            background: 'rgba(255,255,255,0.03)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            padding: '0.6rem',
+            borderRadius: '8px',
+            color: 'var(--text-light)',
+            cursor: 'pointer',
+            fontFamily: 'var(--font-heading)',
+            fontWeight: 700,
+            fontSize: '0.75rem',
+            textTransform: 'uppercase',
+            justifyContent: 'center',
+            transition: 'all 0.2s ease'
+          }}
+          title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+        >
+          {theme === 'dark' ? (
+            <>
+              <span style={{ fontSize: '0.95rem' }}>☀️</span>
+              <span className="label" style={{ marginLeft: '6px' }}>Light Mode</span>
+            </>
+          ) : (
+            <>
+              <span style={{ fontSize: '0.95rem' }}>🌙</span>
+              <span className="label" style={{ marginLeft: '6px' }}>Dark Mode</span>
+            </>
+          )}
+        </button>
+      </div>
 
       {/* User Info & Logout footer */}
       {user ? (

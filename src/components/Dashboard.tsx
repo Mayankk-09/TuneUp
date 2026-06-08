@@ -265,6 +265,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ stats, onSelectExercise, o
                   </p>
                 </div>
               </div>
+
+              <div className="glass-card" onClick={() => onSelectExercise('ear-acoustic')} style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '100%', background: 'linear-gradient(135deg, rgba(22, 163, 74, 0.03) 0%, var(--card) 100%)' }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)', fontWeight: 'bold', color: 'var(--primary)', background: 'rgba(22, 163, 74, 0.1)', padding: '0.15rem 0.45rem', borderRadius: '4px' }}>
+                      Mic Input
+                    </span>
+                  </div>
+                  <h4 style={{ color: 'var(--text-light)', fontSize: '1.05rem', fontWeight: 600 }}>Acoustic Pitch Matcher</h4>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '6px', lineHeight: 1.4 }}>
+                    Enable your microphone, play/sing pitches, and verify notes dynamically.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
 

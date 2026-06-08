@@ -6,8 +6,40 @@ const cors = require('cors');
 const path = require('path');
 const nodemailer = require('nodemailer');
 require('dotenv').config();
+const jwt = require('jsonwebtoken');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'tuneup_super_secret_jwt_key_12345';
+
+const verifyToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) {
+    return res.status(401).json({ error: 'Access denied. No token provided.' });
+  }
+  const token = authHeader.split(' ')[1];
+  if (!token) {
+    return res.status(401).json({ error: 'Access denied. Malformed token.' });
+  }
+  try {
+    const verified = jwt.verify(token, JWT_SECRET);
+    req.user = verified;
+    next();
+  } catch (err) {
+    return res.status(403).json({ error: 'Invalid or expired token.' });
+  }
+};
 
 const app = express();
+const http = require('http');
+const server = http.createServer(app);
+const { Server } = require('socket.io');
+
+const io = new Server(server, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST']
+  }
+});
+
 const PORT = process.env.PORT || 5000;
 
 // Middleware
@@ -50,7 +82,7 @@ const getTransporter = async () => {
       transporterFallback = nodemailer.createTransport({
         host: 'smtp.ethereal.email',
         port: 587,
-        secure: false,
+        secure: true,
         auth: {
           user: testAccount.user,
           pass: testAccount.pass
@@ -167,7 +199,14 @@ app.post('/api/auth/register', async (req, res) => {
       
       const responseUser = newUser.toObject();
       delete responseUser.password;
-      return res.status(201).json({ user: responseUser });
+      
+      const token = jwt.sign(
+        { id: newUser._id, email: newUser.email, username: newUser.username },
+        JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+      
+      return res.status(201).json({ user: responseUser, token });
     } catch (err) {
       return res.status(500).json({ error: 'Failed to register user: ' + err.message });
     }
@@ -197,7 +236,14 @@ app.post('/api/auth/register', async (req, res) => {
     
     const responseUser = { ...newUser };
     delete responseUser.password;
-    return res.status(201).json({ user: responseUser });
+    
+    const token = jwt.sign(
+      { id: newUser.email, email: newUser.email, username: newUser.username },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+    
+    return res.status(201).json({ user: responseUser, token });
   }
 });
 
@@ -226,7 +272,14 @@ app.post('/api/auth/login', async (req, res) => {
       console.log(`[DB] User logged in via OTP: ${user.username}`);
       const responseUser = user.toObject();
       delete responseUser.password;
-      return res.json({ user: responseUser });
+      
+      const token = jwt.sign(
+        { id: user._id, email: user.email, username: user.username },
+        JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+      
+      return res.json({ user: responseUser, token });
     } catch (err) {
       return res.status(500).json({ error: 'Database search failed: ' + err.message });
     }
@@ -240,17 +293,21 @@ app.post('/api/auth/login', async (req, res) => {
     console.log(`[In-Memory Fallback] User logged in via OTP: ${user.username}`);
     const responseUser = { ...user };
     delete responseUser.password;
-    return res.json({ user: responseUser });
+    
+    const token = jwt.sign(
+      { id: user.email, email: user.email, username: user.username },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+    
+    return res.json({ user: responseUser, token });
   }
 });
 
 // 3. User Stats: Update Stats
-app.post('/api/users/stats', async (req, res) => {
-  const { username, streak, xp, masteredChords, unlockedBadges } = req.body;
-
-  if (!username) {
-    return res.status(400).json({ error: 'Username is required to update stats' });
-  }
+app.post('/api/users/stats', verifyToken, async (req, res) => {
+  const { streak, xp, masteredChords, unlockedBadges } = req.body;
+  const username = req.user.username;
 
   if (isDbConnected()) {
     try {
@@ -340,8 +397,235 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected' });
 });
 
+// Real-Time Matchmaking Helpers
+const CHORD_FORMULAS_MIN = [
+  { name: 'maj', displayName: 'Major', intervals: [0, 4, 7] },
+  { name: 'min', displayName: 'Minor', intervals: [0, 3, 7] },
+  { name: 'dim', displayName: 'Diminished', intervals: [0, 3, 6] },
+  { name: 'aug', displayName: 'Augmented', intervals: [0, 4, 8] },
+  { name: 'maj7', displayName: 'Major 7th', intervals: [0, 4, 7, 11] },
+  { name: 'dom7', displayName: 'Dominant 7th', intervals: [0, 4, 7, 10] }
+];
+
+const ROOT_NOTES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+const CHROMATIC_SCALE = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const CHROMATIC_SCALE_FLATS = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+
+function getNotesForFormula(root, intervals) {
+  const isFlat = root.includes('b') || root === 'F';
+  const scale = isFlat ? CHROMATIC_SCALE_FLATS : CHROMATIC_SCALE;
+  let rootIdx = scale.indexOf(root);
+  if (rootIdx === -1) rootIdx = CHROMATIC_SCALE_FLATS.indexOf(root);
+  if (rootIdx === -1) rootIdx = 0;
+
+  return intervals.map(interval => scale[(rootIdx + interval) % 12]);
+}
+
+function generateQuestionsList(count = 10) {
+  const list = [];
+  const roots = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+  for (let i = 0; i < count; i++) {
+    const isChord = Math.random() > 0.5;
+    const root = roots[Math.floor(Math.random() * roots.length)];
+    
+    if (isChord) {
+      const formula = CHORD_FORMULAS_MIN[Math.floor(Math.random() * CHORD_FORMULAS_MIN.length)];
+      const notes = getNotesForFormula(root, formula.intervals);
+      const correctAnswer = notes.join(' - ');
+      
+      const options = [correctAnswer];
+      while (options.length < 4) {
+        const rRoot = roots[Math.floor(Math.random() * roots.length)];
+        const rFormula = CHORD_FORMULAS_MIN[Math.floor(Math.random() * CHORD_FORMULAS_MIN.length)];
+        const rNotes = getNotesForFormula(rRoot, rFormula.intervals).join(' - ');
+        if (!options.includes(rNotes)) {
+          options.push(rNotes);
+        }
+      }
+      options.sort(() => Math.random() - 0.5);
+
+      list.push({
+        prompt: `Spell the root notes of: ${root} ${formula.displayName}`,
+        correctAnswer,
+        options
+      });
+    } else {
+      const degrees = [
+        { d: 1, name: '2nd' },
+        { d: 2, name: '3rd' },
+        { d: 4, name: '5th' }
+      ];
+      const selectedDegree = degrees[Math.floor(Math.random() * degrees.length)];
+      const intervals = [0, 2, 4, 5, 7, 9, 11]; // Major scale
+      const notes = getNotesForFormula(root, intervals);
+      const correctAnswer = notes[selectedDegree.d];
+      
+      const options = [correctAnswer];
+      while (options.length < 4) {
+        const rNote = ROOT_NOTES[Math.floor(Math.random() * ROOT_NOTES.length)];
+        if (!options.includes(rNote)) {
+          options.push(rNote);
+        }
+      }
+      options.sort(() => Math.random() - 0.5);
+
+      list.push({
+        prompt: `Identify note degree ${selectedDegree.name} of scale: ${root} Major Scale`,
+        correctAnswer,
+        options
+      });
+    }
+  }
+  return list;
+}
+
+// Socket.io matchmaking states
+let matchmakingQueue = [];
+const activeRooms = new Map();
+
+io.on('connection', (socket) => {
+  console.log(`[Socket] New connection established: ${socket.id}`);
+
+  socket.on('join_queue', ({ username, avatarId }) => {
+    // Prevent duplicate entries
+    matchmakingQueue = matchmakingQueue.filter(p => p.socketId !== socket.id);
+    
+    matchmakingQueue.push({
+      socketId: socket.id,
+      username,
+      avatarId: avatarId || 'mic'
+    });
+    
+    console.log(`[Queue] Player ${username} joined PvP queue. Queue Size: ${matchmakingQueue.length}`);
+    
+    if (matchmakingQueue.length >= 2) {
+      const player1 = matchmakingQueue.shift();
+      const player2 = matchmakingQueue.shift();
+      
+      const roomId = `room_${player1.socketId}_${player2.socketId}`;
+      const questions = generateQuestionsList(12); // Generate 12 rounds
+      
+      const roomState = {
+        roomId,
+        players: [
+          { socketId: player1.socketId, username: player1.username, avatarId: player1.avatarId, hp: 100 },
+          { socketId: player2.socketId, username: player2.username, avatarId: player2.avatarId, hp: 100 }
+        ],
+        questions,
+        currentQuestionIndex: 0
+      };
+      
+      activeRooms.set(roomId, roomState);
+      
+      const s1 = io.sockets.sockets.get(player1.socketId);
+      const s2 = io.sockets.sockets.get(player2.socketId);
+      
+      if (s1) s1.join(roomId);
+      if (s2) s2.join(roomId);
+      
+      io.to(roomId).emit('match_found', {
+        roomId,
+        players: roomState.players,
+        question: questions[0],
+        totalQuestions: questions.length
+      });
+      
+      console.log(`[Matchmaking] Room ${roomId} created for ${player1.username} vs ${player2.username}`);
+    }
+  });
+
+  socket.on('submit_answer', ({ roomId, option }) => {
+    const roomState = activeRooms.get(roomId);
+    if (!roomState) return;
+
+    const currentQuestion = roomState.questions[roomState.currentQuestionIndex];
+    if (!currentQuestion) return;
+
+    const isCorrect = option === currentQuestion.correctAnswer;
+    const player = roomState.players.find(p => p.socketId === socket.id);
+    const opponent = roomState.players.find(p => p.socketId !== socket.id);
+    
+    if (!player || !opponent) return;
+
+    if (isCorrect) {
+      const damage = 20;
+      opponent.hp = Math.max(0, opponent.hp - damage);
+      
+      if (opponent.hp <= 0) {
+        io.to(roomId).emit('battle_update', {
+          players: roomState.players,
+          actionLog: `⚔️ Correct! ${player.username} strike ${opponent.username} for ${damage} DMG and won!`,
+          isOver: true,
+          winnerSocketId: player.socketId
+        });
+        activeRooms.delete(roomId);
+      } else {
+        roomState.currentQuestionIndex += 1;
+        const nextQuestion = roomState.questions[roomState.currentQuestionIndex];
+        
+        io.to(roomId).emit('battle_update', {
+          players: roomState.players,
+          actionLog: `⚔️ Correct! ${player.username} strike ${opponent.username} for ${damage} DMG!`,
+          question: nextQuestion || null,
+          currentQuestionIndex: roomState.currentQuestionIndex,
+          isOver: !nextQuestion
+        });
+      }
+    } else {
+      const counterDmg = 15;
+      player.hp = Math.max(0, player.hp - counterDmg);
+
+      if (player.hp <= 0) {
+        io.to(roomId).emit('battle_update', {
+          players: roomState.players,
+          actionLog: `💥 Wrong! ${player.username} took counter ${counterDmg} DMG and lost!`,
+          isOver: true,
+          winnerSocketId: opponent.socketId
+        });
+        activeRooms.delete(roomId);
+      } else {
+        roomState.currentQuestionIndex += 1;
+        const nextQuestion = roomState.questions[roomState.currentQuestionIndex];
+
+        io.to(roomId).emit('battle_update', {
+          players: roomState.players,
+          actionLog: `💥 Wrong! ${player.username} took counter ${counterDmg} DMG!`,
+          question: nextQuestion || null,
+          currentQuestionIndex: roomState.currentQuestionIndex,
+          isOver: !nextQuestion
+        });
+      }
+    }
+  });
+
+  socket.on('leave_lobby', () => {
+    matchmakingQueue = matchmakingQueue.filter(p => p.socketId !== socket.id);
+    console.log(`[Queue] Player left. Queue size: ${matchmakingQueue.length}`);
+  });
+
+  socket.on('disconnect', () => {
+    matchmakingQueue = matchmakingQueue.filter(p => p.socketId !== socket.id);
+    
+    for (const [roomId, roomState] of activeRooms.entries()) {
+      const isPlayerInRoom = roomState.players.some(p => p.socketId === socket.id);
+      if (isPlayerInRoom) {
+        const winner = roomState.players.find(p => p.socketId !== socket.id);
+        
+        io.to(roomId).emit('opponent_disconnected', {
+          roomId,
+          message: 'Your opponent disconnected from the duel. You win by forfeit! 🏆',
+          winnerSocketId: winner ? winner.socketId : null
+        });
+        
+        activeRooms.delete(roomId);
+        console.log(`[Game] Room ${roomId} terminated due to player disconnect.`);
+      }
+    }
+  });
+});
+
 // Start listening
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`===============================================`);
   console.log(`  TuneUp Backend Server running on Port ${PORT}  `);
   console.log(`  Health Check: http://localhost:${PORT}/health  `);

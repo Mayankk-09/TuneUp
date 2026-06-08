@@ -35,6 +35,138 @@
   --font-mono: 'Space Grotesk', ui-monospace, monospace;
 }
 
+[data-theme='light'] {
+  /* Day Theme custom palette */
+  --bg: #f8fafc;          /* White (40%) - clean background slate-50 */
+  --surface: #ffffff;     /* White (40%) - card surface */
+  --card: #ffffff;        /* White (40%) - inner cards */
+  --bg-deep: #e2e8f0;     /* slate-200 */
+  --bg-panel: #ffffff;
+  --border-dark: #0f172a; /* slate-900 sharp dark border for neobrutalism */
+
+  /* 30% Green accents */
+  --primary: #16a34a;     /* Green 600 */
+  --secondary: #22c55e;   /* Green 500 */
+  --success: #15803d;     /* Green 700 */
+  
+  --neon-primary: #16a34a;
+  --neon-secondary: #22c55e;
+  --neon-success: #15803d;
+  --neon-purple: #16a34a;
+  --neon-cyan: #059669;
+
+  /* 20% Yellow accent highlights */
+  --neon-yellow: #eab308;  /* Yellow 500 */
+  --neon-highlight: #facc15; /* Yellow 400 */
+
+  /* 10% Orange warning highlights & streaks */
+  --neon-orange: #f97316;  /* Orange 500 */
+  --neon-magenta: #f97316;
+  --neon-danger: #ef4444;  /* Red 500 */
+
+  /* Dark texts */
+  --text-light: #0f172a;  /* slate-900 */
+  --text-muted: #475569;  /* slate-600 */
+}
+
+/* Light mode structural overrides */
+html[data-theme='light'] {
+  color-scheme: light;
+  background-color: var(--bg);
+}
+
+[data-theme='light'] body {
+  background-color: var(--bg);
+  background-image: 
+    radial-gradient(at 10% 20%, rgba(22, 163, 74, 0.05) 0px, transparent 50%),
+    radial-gradient(at 90% 80%, rgba(234, 179, 8, 0.05) 0px, transparent 50%);
+  color: var(--text-light);
+}
+
+/* Neobrutalist borders & shadows in light mode */
+[data-theme='light'] .neo-panel,
+[data-theme='light'] .glass-panel {
+  border: 2px solid var(--border-dark) !important;
+  box-shadow: 6px 6px 0px var(--border-dark) !important;
+  background: var(--surface) !important;
+}
+
+[data-theme='light'] .neo-card,
+[data-theme='light'] .glass-card {
+  border: 2px solid var(--border-dark) !important;
+  box-shadow: 4px 4px 0px var(--border-dark) !important;
+  background: var(--card) !important;
+}
+
+[data-theme='light'] .neo-card:hover,
+[data-theme='light'] .glass-card:hover {
+  transform: translate(-3px, -3px) !important;
+  box-shadow: 7px 7px 0px var(--border-dark) !important;
+  background: var(--surface) !important;
+  border-color: var(--border-dark) !important;
+}
+
+[data-theme='light'] .neo-card:active,
+[data-theme='light'] .glass-card:active {
+  transform: translate(2px, 2px) !important;
+  box-shadow: 2px 2px 0px var(--border-dark) !important;
+}
+
+[data-theme='light'] .sidebar-nav-btn {
+  color: var(--text-muted);
+}
+
+[data-theme='light'] .sidebar-nav-btn.active {
+  background: rgba(22, 163, 74, 0.1) !important;
+  color: var(--primary) !important;
+  border: 2px solid var(--border-dark) !important;
+  box-shadow: 2px 2px 0px var(--border-dark) !important;
+}
+
+[data-theme='light'] .sidebar-nav-btn:hover {
+  background: rgba(22, 163, 74, 0.05) !important;
+  color: var(--primary) !important;
+}
+
+[data-theme='light'] .cyber-sidebar {
+  border-right: 2px solid var(--border-dark) !important;
+  box-shadow: 4px 0px 0px rgba(0, 0, 0, 0.02) !important;
+}
+
+[data-theme='light'] .sidebar-footer-btn {
+  background: var(--surface);
+  border: 2px solid var(--border-dark);
+  color: var(--text-light);
+  box-shadow: 2px 2px 0px var(--border-dark);
+}
+
+[data-theme='light'] .sidebar-footer-btn:hover {
+  background: #f8fafc;
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0px var(--border-dark);
+}
+
+[data-theme='light'] .sidebar-footer-btn.primary-btn {
+  background: var(--primary) !important;
+  color: #ffffff !important;
+  border-color: var(--border-dark) !important;
+}
+
+[data-theme='light'] .sidebar-footer-btn.primary-btn:hover {
+  box-shadow: 3px 3px 0px var(--border-dark) !important;
+  background: #15803d !important;
+}
+
+[data-theme='light'] .sidebar-footer-btn.logout-btn {
+  border-color: var(--border-dark) !important;
+  color: var(--neon-danger) !important;
+}
+
+[data-theme='light'] .sidebar-footer-btn.logout-btn:hover {
+  background: #fef2f2 !important;
+  box-shadow: 3px 3px 0px var(--border-dark) !important;
+}
+
 html {
   background-color: var(--bg);
   color-scheme: dark;

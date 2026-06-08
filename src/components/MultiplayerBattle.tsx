@@ -1,11 +1,13 @@
-// MultiplayerBattle.tsx - Speed Theory Duels against Simulated AI Opponents
+// MultiplayerBattle.tsx - Speed Theory Duels against Simulated bots or Online PvP Opponents
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Swords, Heart, Trophy, Zap } from 'lucide-react';
+import { Swords, Heart, Trophy, Zap, Loader2, ShieldAlert } from 'lucide-react';
+import { io, Socket } from 'socket.io-client';
 import { playUIClick, playUIBack, playUISuccess, playUIFailure } from '../utils/audioSynth';
 import { getChordNotes, CHORD_FORMULAS, getScaleNotes, SCALE_FORMULAS } from '../utils/musicEngine';
 
 interface MultiplayerBattleProps {
+  user: { username: string; unlockedBadges: string[] } | null;
   onBack: () => void;
   onUpdateStats: (points: number) => void;
 }
@@ -31,7 +33,7 @@ const getIsChordQuestion = (): boolean => {
 };
 
 const getRandomDegree = (): number => {
-  return Math.floor(Math.random() * 4) + 1;
+  return Math.floor(Math.random() * 3) + 1; // 2nd, 3rd, 5th
 };
 
 const shuffleOptions = <T,>(arr: T[]): T[] => {
@@ -42,40 +44,166 @@ const getAiResponseDelay = (min: number, max: number): number => {
   return Math.floor(Math.random() * (max - min)) + min;
 };
 
-export const MultiplayerBattle: React.FC<MultiplayerBattleProps> = ({ onBack, onUpdateStats }) => {
+export const MultiplayerBattle: React.FC<MultiplayerBattleProps> = ({ user, onBack, onUpdateStats }) => {
   const [battleState, setBattleState] = useState<'lobby' | 'fighting' | 'won' | 'lost'>('lobby');
   const [selectedOpponentIdx, setSelectedOpponentIdx] = useState(0);
   
+  // Game mode
+  const [isOnline, setIsOnline] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchTime, setSearchTime] = useState(0);
+  const [searchTimeoutAlert, setSearchTimeoutAlert] = useState(false);
+
   // HP bars
   const [userHp, setUserHp] = useState(100);
   const [opponentHp, setOpponentHp] = useState(100);
   
   // Game states
   const [question, setQuestion] = useState<BattleQuestion | null>(null);
+  const [questionIndex, setQuestionIndex] = useState(0);
+  const [totalQuestions, setTotalQuestions] = useState(12);
   const [answerStatus, setAnswerStatus] = useState<'unanswered' | 'correct' | 'incorrect'>('unanswered');
   const [clickedOption, setClickedOption] = useState('');
   
   // Battle log history
   const [battleLog, setBattleLog] = useState<string[]>(['Match initialized.']);
   
-  // Timing references
+  // Sockets references
+  const socketRef = useRef<Socket | null>(null);
+  const searchTimeIntervalRef = useRef<number | null>(null);
+
+  // AI Timing references
   const aiTimerRef = useRef<number | null>(null);
   const activeOpponent = AI_OPPONENTS[selectedOpponentIdx];
 
+  // Online opponent info
+  const [opponentInfo, setOpponentInfo] = useState<{ username: string; avatarId: string; hp: number } | null>(null);
+  const [roomId, setRoomId] = useState<string | null>(null);
+
+  const username = user?.username || 'Guest Player';
+  const avatarId = user?.unlockedBadges?.[0] || 'mic';
+
+  // --- ONLINE SOCKET LOBBY CONTROL ---
+  const handleStartQueue = () => {
+    playUIClick();
+    setIsSearching(true);
+    setSearchTime(0);
+    setSearchTimeoutAlert(false);
+
+    // 10s counter interval
+    searchTimeIntervalRef.current = window.setInterval(() => {
+      setSearchTime(prev => {
+        if (prev >= 10) {
+          setSearchTimeoutAlert(true);
+        }
+        return prev + 1;
+      });
+    }, 1000);
+
+    // Initialize socket connection
+    if (!socketRef.current) {
+      socketRef.current = io('http://localhost:5000', {
+        transports: ['websocket'],
+        timeout: 5000
+      });
+    }
+
+    const socket = socketRef.current;
+
+    socket.on('connect', () => {
+      console.log('[Socket] Connected to battle arena!');
+      socket.emit('join_queue', { username, avatarId });
+    });
+
+    socket.on('connect_error', (err) => {
+      console.error('[Socket] Connection error:', err);
+      handleCancelQueue();
+      alert('Could not reach Online PvP Server. Defaulting to Simulated AI Bot match!');
+    });
+
+    // Match found listener
+    socket.on('match_found', ({ roomId, players, question, totalQuestions }) => {
+      playUISuccess();
+      if (searchTimeIntervalRef.current) window.clearInterval(searchTimeIntervalRef.current);
+      
+      const opp = players.find((p: any) => p.socketId !== socket.id);
+      setOpponentInfo({ username: opp.username, avatarId: opp.avatarId, hp: 100 });
+      setRoomId(roomId);
+      setQuestion(question);
+      setTotalQuestions(totalQuestions);
+      setQuestionIndex(0);
+      setUserHp(100);
+      setOpponentHp(100);
+      setIsOnline(true);
+      setIsSearching(false);
+      setBattleState('fighting');
+      setBattleLog([`⚔️ PvP Match found against ${opp.username}! Get ready.`]);
+    });
+
+    // Battle update listener
+    socket.on('battle_update', ({ players, actionLog, question: nextQuestion, currentQuestionIndex, isOver, winnerSocketId }) => {
+      const me = players.find((p: any) => p.socketId === socket.id);
+      const opp = players.find((p: any) => p.socketId !== socket.id);
+
+      if (me) setUserHp(me.hp);
+      if (opp) {
+        setOpponentHp(opp.hp);
+        setOpponentInfo(prev => prev ? { ...prev, hp: opp.hp } : null);
+      }
+
+      setBattleLog(prev => [actionLog, ...prev]);
+      setAnswerStatus('unanswered');
+      setClickedOption('');
+
+      if (isOver) {
+        const userWon = winnerSocketId === socket.id;
+        triggerEndBattle(userWon);
+      } else {
+        setQuestion(nextQuestion);
+        if (currentQuestionIndex !== undefined) setQuestionIndex(currentQuestionIndex);
+      }
+    });
+
+    // Opponent disconnected listener
+    socket.on('opponent_disconnected', ({ message }) => {
+      playUISuccess();
+      setBattleLog(prev => [message, ...prev]);
+      triggerEndBattle(true);
+    });
+
+    // Trigger initial connection if socket was already created but offline
+    if (socket.connected) {
+      socket.emit('join_queue', { username, avatarId });
+    } else {
+      socket.connect();
+    }
+  };
+
+  const handleCancelQueue = () => {
+    playUIBack();
+    setIsSearching(false);
+    if (searchTimeIntervalRef.current) window.clearInterval(searchTimeIntervalRef.current);
+    if (socketRef.current) {
+      socketRef.current.emit('leave_lobby');
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
+  };
+
+  // --- LOCAL OFFLINE SIMULATION CONTROL ---
   const generateBattleQuestion = () => {
     setAnswerStatus('unanswered');
     setClickedOption('');
 
-    // Generate random scale degree or chord speller questions
     const roots = ['C', 'D', 'E', 'F', 'G', 'A', 'B', 'Bb', 'Eb', 'F#'];
     const randomRoot = getRandomElement(roots);
-    const isChordQuestion = getIsChordQuestion();
+    const isChord = getIsChordQuestion();
 
     let promptText = '';
     let correct = '';
     let opts: string[] = [];
 
-    if (isChordQuestion) {
+    if (isChord) {
       const formulas = Object.values(CHORD_FORMULAS);
       const randomFormula = getRandomElement(formulas);
       const notes = getChordNotes(randomRoot, randomFormula.name);
@@ -95,7 +223,7 @@ export const MultiplayerBattle: React.FC<MultiplayerBattleProps> = ({ onBack, on
       const formulas = Object.values(SCALE_FORMULAS);
       const randomFormula = getRandomElement(formulas);
       const notes = getScaleNotes(randomRoot, randomFormula.name);
-      const degree = getRandomDegree(); // 1st to 5th notes
+      const degree = getRandomDegree();
       
       promptText = `Identify note degree ${degree + 1} of scale: ${randomRoot} ${randomFormula.displayName}`;
       correct = notes[degree];
@@ -112,7 +240,6 @@ export const MultiplayerBattle: React.FC<MultiplayerBattleProps> = ({ onBack, on
     const shuffled = shuffleOptions(opts);
     setQuestion({ prompt: promptText, correctAnswer: correct, options: shuffled });
 
-    // Schedule AI's next move
     scheduleAiMove();
   };
 
@@ -123,7 +250,6 @@ export const MultiplayerBattle: React.FC<MultiplayerBattleProps> = ({ onBack, on
     const aiResponseDelay = getAiResponseDelay(minTime, maxTime);
 
     aiTimerRef.current = window.setTimeout(() => {
-      // AI hits user
       handleAiStrike();
     }, aiResponseDelay);
   };
@@ -134,7 +260,6 @@ export const MultiplayerBattle: React.FC<MultiplayerBattleProps> = ({ onBack, on
     playUIFailure();
     setAnswerStatus('incorrect');
     
-    // User takes damage
     const damageDealt = activeOpponent.damage;
     setUserHp(prev => {
       const nextHp = Math.max(0, prev - damageDealt);
@@ -146,9 +271,9 @@ export const MultiplayerBattle: React.FC<MultiplayerBattleProps> = ({ onBack, on
 
     setBattleLog(prev => [`💥 ${activeOpponent.name} answered faster and hit you for ${damageDealt} DMG!`, ...prev]);
 
-    // Next round delay
     setTimeout(() => {
       if (userHp > damageDealt && opponentHp > 0) {
+        setQuestionIndex(prev => prev + 1);
         generateBattleQuestion();
       }
     }, 1500);
@@ -156,17 +281,23 @@ export const MultiplayerBattle: React.FC<MultiplayerBattleProps> = ({ onBack, on
 
   const handleUserAnswerClick = (option: string) => {
     if (answerStatus !== 'unanswered' || !question) return;
-    if (aiTimerRef.current) window.clearTimeout(aiTimerRef.current);
 
     setClickedOption(option);
+
+    if (isOnline && socketRef.current && roomId) {
+      setAnswerStatus('incorrect'); // lock input immediately while submitting
+      socketRef.current.emit('submit_answer', { roomId, option });
+      return;
+    }
+
+    // Offline logic
+    if (aiTimerRef.current) window.clearTimeout(aiTimerRef.current);
     const isCorrect = option === question.correctAnswer;
 
     if (isCorrect) {
       playUISuccess();
       setAnswerStatus('correct');
-      
-      // Opponent takes damage
-      const damageDealt = 20; // flat user strike power
+      const damageDealt = 25;
       setOpponentHp(prev => {
         const nextHp = Math.max(0, prev - damageDealt);
         if (nextHp <= 0) {
@@ -179,8 +310,6 @@ export const MultiplayerBattle: React.FC<MultiplayerBattleProps> = ({ onBack, on
     } else {
       playUIFailure();
       setAnswerStatus('incorrect');
-      
-      // User fumbles and takes counter attack damage
       const counterDmg = Math.round(activeOpponent.damage * 0.75);
       setUserHp(prev => {
         const nextHp = Math.max(0, prev - counterDmg);
@@ -193,9 +322,9 @@ export const MultiplayerBattle: React.FC<MultiplayerBattleProps> = ({ onBack, on
       setBattleLog(prev => [`💥 Wrong answer! ${activeOpponent.name} counter-attacks for ${counterDmg} DMG!`, ...prev]);
     }
 
-    // Move to next question after brief delay
     setTimeout(() => {
-      if (userHp > 0 && opponentHp > 20) { // check if opponent is still alive
+      if (userHp > 0 && opponentHp > 25) {
+        setQuestionIndex(prev => prev + 1);
         generateBattleQuestion();
       }
     }, 1500);
@@ -207,18 +336,27 @@ export const MultiplayerBattle: React.FC<MultiplayerBattleProps> = ({ onBack, on
     if (userWon) {
       playUISuccess();
       setBattleState('won');
-      onUpdateStats(activeOpponent.xpReward); // Claim XP
+      onUpdateStats(isOnline ? 100 : activeOpponent.xpReward); // Claim XP
     } else {
       playUIFailure();
       setBattleState('lost');
     }
+
+    // Clean up online sockets
+    if (isOnline && socketRef.current) {
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
   };
 
-  const handleStartFight = () => {
+  const handleStartFightOffline = () => {
     playUIClick();
+    setIsOnline(false);
     setUserHp(100);
     setOpponentHp(100);
-    setBattleLog(['Duel started! Answer theory questions as fast as you can.']);
+    setQuestionIndex(0);
+    setTotalQuestions(12);
+    setBattleLog(['Offline practice match started! Answer questions quickly.']);
     setBattleState('fighting');
     setTimeout(() => {
       generateBattleQuestion();
@@ -228,12 +366,21 @@ export const MultiplayerBattle: React.FC<MultiplayerBattleProps> = ({ onBack, on
   const handleLeaveBattle = () => {
     playUIBack();
     if (aiTimerRef.current) window.clearTimeout(aiTimerRef.current);
+    if (searchTimeIntervalRef.current) window.clearInterval(searchTimeIntervalRef.current);
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
     onBack();
   };
 
   useEffect(() => {
     return () => {
       if (aiTimerRef.current) window.clearTimeout(aiTimerRef.current);
+      if (searchTimeIntervalRef.current) window.clearInterval(searchTimeIntervalRef.current);
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
     };
   }, []);
 
@@ -241,24 +388,37 @@ export const MultiplayerBattle: React.FC<MultiplayerBattleProps> = ({ onBack, on
     <div className="view-enter glass-panel" style={{ padding: '2rem', maxWidth: '750px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       
       {/* 1. LOBBY SCREEN */}
-      {battleState === 'lobby' && (
+      {battleState === 'lobby' && !isSearching && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', textAlign: 'center', alignItems: 'center' }}>
           
-          <div className="flex-center" style={{ width: '70px', height: '70px', borderRadius: '50%', background: 'rgba(157,78,221,0.1)', border: '2px solid var(--neon-purple)' }}>
-            <Swords size={32} style={{ color: 'var(--neon-purple)' }} />
+          <div className="flex-center" style={{ width: '70px', height: '70px', borderRadius: '50%', background: 'rgba(124,92,255,0.1)', border: '2px solid var(--primary)' }}>
+            <Swords size={32} style={{ color: 'var(--primary)' }} />
           </div>
 
           <div>
-            <h2 className="neon-text-purple" style={{ fontSize: '1.75rem' }}>Cyber Arena Duels</h2>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '4px' }}>
-              Speed theory match. Battle simulated AI bots to claim large XP rewards!
+            <h2 style={{ fontSize: '1.75rem', fontWeight: 900 }}>Cyber Arena Duels</h2>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '4px' }}>
+              Speed theory match. Duel real online players or train offline with simulated bots!
             </p>
           </div>
 
+          {/* PvP Matchmaking Button */}
+          <div style={{ width: '100%', padding: '1rem', background: 'rgba(255, 255, 255, 0.02)', borderRadius: '12px', border: '1.5px dashed var(--primary)', display: 'flex', flexDirection: 'column', gap: '0.75rem', alignItems: 'center' }}>
+            <h4 style={{ fontSize: '0.95rem', fontWeight: 'bold' }}>⚡ Live Matchmaking</h4>
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Match with another player online to test your skills (+100 XP)</p>
+            <button
+              onClick={handleStartQueue}
+              className="btn-cyber btn-cyber-primary"
+              style={{ width: '100%', padding: '0.75rem', fontWeight: 'bold' }}
+            >
+              SEARCH FOR ONLINE MATCH
+            </button>
+          </div>
+
           {/* Opponent Selection list */}
-          <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1rem' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', textAlign: 'left' }}>
-              SELECT BATTLE OPPONENT:
+          <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.5rem' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', textAlign: 'left', fontWeight: 'bold' }}>
+              SELECT OFFLINE PRACTICE BOT:
             </span>
             {AI_OPPONENTS.map((bot, idx) => {
               const isSelected = selectedOpponentIdx === idx;
@@ -273,21 +433,20 @@ export const MultiplayerBattle: React.FC<MultiplayerBattleProps> = ({ onBack, on
                     alignItems: 'center',
                     padding: '1rem',
                     cursor: 'pointer',
-                    borderWidth: isSelected ? '2px' : '1px',
-                    borderColor: isSelected ? 'var(--neon-purple)' : 'rgba(255,255,255,0.05)',
-                    background: isSelected ? 'rgba(157,78,221,0.05)' : 'rgba(0,0,0,0.15)',
-                    boxShadow: isSelected ? '0 0 10px rgba(157,78,221,0.2)' : 'none',
-                    transform: isSelected ? 'scale(1.02)' : 'none',
+                    border: '2px solid var(--border-dark)',
+                    background: isSelected ? 'rgba(124,92,255,0.08)' : 'var(--card)',
+                    boxShadow: isSelected ? '4px 4px 0px var(--border-dark)' : '2px 2px 0px var(--border-dark)',
+                    transform: isSelected ? 'translate(-2px, -2px)' : 'none',
                     transition: 'all 0.15s ease'
                   }}
                 >
                   <div style={{ textAlign: 'left' }}>
                     <div style={{ fontWeight: 'bold', fontSize: '1rem' }}>{bot.name}</div>
-                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '2px', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
-                      DIFFICULTY: {bot.difficulty} • ATK: {bot.damage} HP
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
+                      DIFFICULTY: {bot.difficulty} • Counter-ATK: {bot.damage} HP
                     </div>
                   </div>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 'bold', color: 'var(--neon-cyan)' }}>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 'bold', color: 'var(--secondary)' }}>
                     +{bot.xpReward} XP
                   </div>
                 </div>
@@ -304,14 +463,53 @@ export const MultiplayerBattle: React.FC<MultiplayerBattleProps> = ({ onBack, on
               LEAVE ARENA
             </button>
             <button
-              onClick={handleStartFight}
-              className="btn-cyber btn-cyber-primary"
+              onClick={handleStartFightOffline}
+              className="btn-cyber btn-cyber-secondary"
               style={{ flex: 2, padding: '0.8rem', fontWeight: 'bold' }}
             >
-              ENTER BATTLE
+              PLAY OFFLINE BOT
             </button>
           </div>
 
+        </div>
+      )}
+
+      {/* 1b. MATCHMAKING SEARCH SCREEN */}
+      {battleState === 'lobby' && isSearching && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', textAlign: 'center', alignItems: 'center', padding: '2rem 1rem' }}>
+          
+          <Loader2 size={48} className="animate-spin" style={{ color: 'var(--primary)' }} />
+
+          <div>
+            <h3 style={{ fontSize: '1.5rem', fontWeight: 900 }}>Searching for Opponent...</h3>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '4px', fontFamily: 'var(--font-mono)' }}>
+              Queue Time: {searchTime} seconds
+            </p>
+          </div>
+
+          {searchTimeoutAlert && (
+            <div style={{ padding: '1rem', background: 'rgba(239, 68, 68, 0.08)', border: '2px solid var(--border-dark)', borderRadius: '8px', maxWidth: '450px', display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
+              <ShieldAlert size={20} style={{ color: 'var(--neon-danger)' }} />
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                No active online players found in the arena queue right now. You can continue waiting or practice offline against an AI bot!
+              </p>
+              <button
+                onClick={() => { handleCancelQueue(); handleStartFightOffline(); }}
+                className="btn-cyber btn-cyber-secondary"
+                style={{ fontSize: '0.7rem', padding: '0.4rem 1rem' }}
+              >
+                PRACTICE OFFLINE INSTEAD
+              </button>
+            </div>
+          )}
+
+          <button
+            onClick={handleCancelQueue}
+            className="btn-cyber"
+            style={{ width: '100%', maxWidth: '240px', padding: '0.75rem', fontWeight: 'bold', marginTop: '1rem' }}
+          >
+            CANCEL SEARCH
+          </button>
         </div>
       )}
 
@@ -324,38 +522,43 @@ export const MultiplayerBattle: React.FC<MultiplayerBattleProps> = ({ onBack, on
             {/* User HP */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <div className="flex-between" style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)' }}>
-                <span>🛡️ PLAYER HP</span>
-                <span style={{ color: 'var(--neon-success)', fontWeight: 'bold' }}>{userHp}%</span>
+                <span>🛡5 {username.toUpperCase()}</span>
+                <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>{userHp}%</span>
               </div>
-              <div style={{ height: '12px', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', overflow: 'hidden', border: '1.5px solid #000' }}>
-                <div style={{ width: `${userHp}%`, height: '100%', background: 'var(--neon-success)', transition: 'width 0.2s ease' }} />
+              <div style={{ height: '12px', background: 'rgba(0,0,0,0.2)', borderRadius: '6px', overflow: 'hidden', border: '1.5px solid var(--border-dark)' }}>
+                <div style={{ width: `${userHp}%`, height: '100%', background: 'var(--primary)', transition: 'width 0.2s ease' }} />
               </div>
             </div>
 
             {/* VS */}
-            <div style={{ fontSize: '0.85rem', fontFamily: 'var(--font-mono)', fontWeight: 'bold', padding: '0.3rem 0.6rem', background: '#000', borderRadius: '4px', border: '1.5px solid var(--neon-purple)' }}>
+            <div style={{ fontSize: '0.85rem', fontFamily: 'var(--font-mono)', fontWeight: 'bold', padding: '0.3rem 0.6rem', background: 'var(--bg)', borderRadius: '4px', border: '1.5px solid var(--border-dark)' }}>
               VS
             </div>
 
             {/* Opponent HP */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <div className="flex-between" style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)' }}>
-                <span>👾 {activeOpponent.name.split(' ')[0].toUpperCase()} HP</span>
-                <span style={{ color: 'var(--neon-danger)', fontWeight: 'bold' }}>{opponentHp}%</span>
+                <span>👾 {isOnline ? (opponentInfo?.username || 'OPPONENT').toUpperCase() : activeOpponent.name.split(' ')[0].toUpperCase()}</span>
+                <span style={{ color: 'var(--secondary)', fontWeight: 'bold' }}>{opponentHp}%</span>
               </div>
-              <div style={{ height: '12px', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', overflow: 'hidden', border: '1.5px solid #000' }}>
-                <div style={{ width: `${opponentHp}%`, height: '100%', background: 'var(--neon-danger)', transition: 'width 0.2s ease' }} />
+              <div style={{ height: '12px', background: 'rgba(0,0,0,0.2)', borderRadius: '6px', overflow: 'hidden', border: '1.5px solid var(--border-dark)' }}>
+                <div style={{ width: `${opponentHp}%`, height: '100%', background: 'var(--secondary)', transition: 'width 0.2s ease' }} />
               </div>
             </div>
+          </div>
+
+          <div className="flex-between" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '4px' }}>
+            <span>Round {questionIndex + 1} of {totalQuestions}</span>
+            <span>Mode: {isOnline ? 'Online PvP Duel' : 'Simulated AI Practice'}</span>
           </div>
 
           {/* Active Question Box */}
           <div 
             style={{ 
-              background: 'rgba(0,0,0,0.3)', 
+              background: 'var(--card)', 
               borderRadius: '12px', 
-              border: '2.5px solid #000', 
-              boxShadow: '4px 4px 0 #000',
+              border: '2px solid var(--border-dark)', 
+              boxShadow: '4px 4px 0 var(--border-dark)',
               padding: '1.5rem',
               textAlign: 'center',
               position: 'relative'
@@ -365,10 +568,10 @@ export const MultiplayerBattle: React.FC<MultiplayerBattleProps> = ({ onBack, on
               <Zap size={10} fill="currentColor" /> FAST RESPONSE ACTIVE
             </div>
             
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', display: 'block', marginBottom: '8px' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', display: 'block', marginBottom: '8px' }}>
               SPEED QUESTION:
             </span>
-            <h3 style={{ fontSize: '1.4rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>
+            <h3 style={{ fontSize: '1.4rem', fontWeight: 'bold', color: 'var(--text-light)' }}>
               {question.prompt}
             </h3>
           </div>
@@ -391,6 +594,18 @@ export const MultiplayerBattle: React.FC<MultiplayerBattleProps> = ({ onBack, on
                   onClick={() => handleUserAnswerClick(option)}
                   disabled={answerStatus !== 'unanswered'}
                   className={optClass}
+                  style={{
+                    border: '2px solid var(--border-dark)',
+                    borderRadius: '8px',
+                    padding: '0.8rem',
+                    fontFamily: 'var(--font-body)',
+                    fontWeight: 'bold',
+                    cursor: answerStatus === 'unanswered' ? 'pointer' : 'default',
+                    background: isClicked ? 'var(--primary)' : 'var(--card)',
+                    color: isClicked ? '#fff' : 'var(--text-light)',
+                    boxShadow: '2px 2px 0 var(--border-dark)',
+                    transition: 'all 0.15s ease'
+                  }}
                 >
                   {option}
                 </button>
@@ -399,12 +614,12 @@ export const MultiplayerBattle: React.FC<MultiplayerBattleProps> = ({ onBack, on
           </div>
 
           {/* Battle Logs ticker */}
-          <div style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: '10px', padding: '0.75rem', height: '80px', overflowY: 'auto' }}>
-            <span style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+          <div style={{ background: 'rgba(0,0,0,0.1)', border: '2px solid var(--border-dark)', borderRadius: '10px', padding: '0.75rem', height: '80px', overflowY: 'auto' }}>
+            <span style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>
               BATTLE LOGS:
             </span>
             {battleLog.map((log, index) => (
-              <div key={index} style={{ fontSize: '0.75rem', color: index === 0 ? 'var(--text-primary)' : 'var(--text-muted)', marginTop: '2px' }}>
+              <div key={index} style={{ fontSize: '0.75rem', color: index === 0 ? 'var(--text-light)' : 'var(--text-muted)', marginTop: '2px' }}>
                 {log}
               </div>
             ))}
@@ -423,10 +638,10 @@ export const MultiplayerBattle: React.FC<MultiplayerBattleProps> = ({ onBack, on
               width: '80px', 
               height: '80px', 
               borderRadius: '50%', 
-              background: 'rgba(57, 255, 20, 0.1)', 
-              border: '2px solid var(--neon-success)',
-              color: 'var(--neon-success)',
-              boxShadow: '0 0 20px rgba(57, 255, 20, 0.3)',
+              background: 'rgba(22, 163, 74, 0.1)', 
+              border: '2px solid var(--primary)',
+              color: 'var(--primary)',
+              boxShadow: '0 0 20px rgba(22, 163, 74, 0.3)',
               animation: 'pulse 1.5s infinite alternate'
             }}
           >
@@ -434,23 +649,23 @@ export const MultiplayerBattle: React.FC<MultiplayerBattleProps> = ({ onBack, on
           </div>
 
           <div>
-            <h2 className="neon-text-success" style={{ fontSize: '2rem' }}>Victory Claimed!</h2>
-            <p style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>
-              You defeated {activeOpponent.name} in speed musical theory combat!
+            <h2 className="neon-text-success" style={{ fontSize: '2rem', color: 'var(--primary)' }}>Victory Claimed!</h2>
+            <p style={{ color: 'var(--text-muted)', marginTop: '8px' }}>
+              You defeated your opponent in speed musical theory combat!
             </p>
           </div>
 
-          <div style={{ background: 'rgba(0,0,0,0.2)', border: '2.5px solid #000', padding: '1rem 2rem', borderRadius: '12px', display: 'flex', gap: '1.5rem', alignItems: 'center', boxShadow: '4px 4px 0 #000' }}>
+          <div style={{ background: 'var(--card)', border: '2px solid var(--border-dark)', padding: '1rem 2rem', borderRadius: '12px', display: 'flex', gap: '1.5rem', alignItems: 'center', boxShadow: '4px 4px 0 var(--border-dark)' }}>
             <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>EXPERIENCE CLAIMED</div>
-              <div style={{ fontSize: '1.8rem', fontWeight: 'bold', color: 'var(--neon-cyan)', marginTop: '4px' }}>+{activeOpponent.xpReward} XP</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>EXPERIENCE CLAIMED</div>
+              <div style={{ fontSize: '1.8rem', fontWeight: 'bold', color: 'var(--secondary)', marginTop: '4px' }}>+{isOnline ? 100 : activeOpponent.xpReward} XP</div>
             </div>
             
-            <div style={{ width: '2px', height: '40px', background: '#000' }} />
+            <div style={{ width: '2px', height: '40px', background: 'var(--border-dark)' }} />
 
             <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>DUEL STATUS</div>
-              <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: 'var(--neon-purple)', marginTop: '4px' }}>Level Complete!</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>DUEL STATUS</div>
+              <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: 'var(--primary)', marginTop: '4px' }}>Level Complete!</div>
             </div>
           </div>
 
@@ -484,25 +699,25 @@ export const MultiplayerBattle: React.FC<MultiplayerBattleProps> = ({ onBack, on
               width: '80px', 
               height: '80px', 
               borderRadius: '50%', 
-              background: 'rgba(255, 0, 85, 0.1)', 
+              background: 'rgba(239, 68, 68, 0.1)', 
               border: '2px solid var(--neon-danger)',
               color: 'var(--neon-danger)',
-              boxShadow: '0 0 20px rgba(255, 0, 85, 0.3)'
+              boxShadow: '0 0 20px rgba(239, 68, 68, 0.3)'
             }}
           >
             <Heart size={40} style={{ opacity: 0.3 }} />
           </div>
 
           <div>
-            <h2 className="neon-text-magenta" style={{ fontSize: '2rem' }}>You Were Defeated</h2>
-            <p style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>
-              {activeOpponent.name} answered faster. Don't sweat it, study your scales and try again!
+            <h2 style={{ fontSize: '2rem', color: 'var(--neon-danger)' }}>You Were Defeated</h2>
+            <p style={{ color: 'var(--text-muted)', marginTop: '8px' }}>
+              Your opponent was faster. Don't sweat it, study your scales and try again!
             </p>
           </div>
 
           <div style={{ display: 'flex', gap: '1rem', width: '100%', marginTop: '1.5rem' }}>
             <button
-              onClick={handleStartFight}
+              onClick={isOnline ? handleStartQueue : handleStartFightOffline}
               className="btn-cyber btn-cyber-primary"
               style={{ flex: 1, padding: '0.8rem', fontWeight: 'bold' }}
             >
@@ -513,7 +728,7 @@ export const MultiplayerBattle: React.FC<MultiplayerBattleProps> = ({ onBack, on
               className="btn-cyber"
               style={{ flex: 1, padding: '0.8rem' }}
             >
-              CHANGE OPPONENT
+              CHANGE MODE
             </button>
           </div>
 

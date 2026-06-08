@@ -198,7 +198,7 @@ interface ProfileProps {
     masteredChords: string[];
     unlockedBadges: string[];
   } | null;
-  onLoginSuccess: (userData: any) => void;
+  onLoginSuccess: (userData: any, token?: string) => void;
   onLogout: () => void;
 }
 
@@ -288,7 +288,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, onLoginSuccess, onLogout
       }
 
       playUISuccess();
-      onLoginSuccess(data.user);
+      onLoginSuccess(data.user, data.token);
     } catch (err: any) {
       playUIBack();
       setErrorMsg(err.message || 'Network connection failed to backend server.');

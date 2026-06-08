@@ -12,6 +12,7 @@ import { MultiplayerBattle } from './components/MultiplayerBattle';
 import { Sidebar } from './components/Sidebar';
 import { Profile } from './components/Profile';
 import { SongLyricsView } from './components/SongLyricsView';
+import { AcousticPitchTrainer } from './components/AcousticPitchTrainer';
 import { playUIClick, playUIBack, playIntroChime } from './utils/audioSynth';
 import { FloatingMusicParticles } from './components/FloatingMusicParticles';
 import { Mascot } from './components/Mascot';
@@ -31,6 +32,19 @@ export default function App() {
   const [jamPresetSong, setJamPresetSong] = useState<string | null>(null);
   const [selectedSongForLyrics, setSelectedSongForLyrics] = useState<string | null>(null);
   const [showDevPage, setShowDevPage] = useState(false);
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const savedTheme = localStorage.getItem('tuneup_theme');
+    return (savedTheme === 'light' || savedTheme === 'dark') ? savedTheme : 'dark';
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('tuneup_theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => (prev === 'light' ? 'dark' : 'light'));
+  };
 
   // App Welcome loading/intro states
   const [showIntro, setShowIntro] = useState(true);
@@ -114,12 +128,19 @@ export default function App() {
   // Synchronize stats with server when updated
   const syncStatsWithServer = async (updatedUser: any) => {
     if (!updatedUser) return;
+    const token = localStorage.getItem('tuneup_jwt_token');
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json'
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
     try {
       const res = await fetch('http://localhost:5000/api/users/stats', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
-          username: updatedUser.username,
           xp: updatedUser.xp,
           streak: updatedUser.streak,
           masteredChords: updatedUser.masteredChords,
@@ -216,7 +237,10 @@ export default function App() {
     }
   };
 
-  const handleLoginSuccess = async (userData: any) => {
+  const handleLoginSuccess = async (userData: any, token?: string) => {
+    if (token) {
+      localStorage.setItem('tuneup_jwt_token', token);
+    }
     // Merge guest active session stats into logged in profile
     const mergedXp = userData.xp + stats.score;
     const mergedStreak = Math.max(userData.streak, stats.streak);
@@ -254,6 +278,7 @@ export default function App() {
   const handleLogout = () => {
     setUser(null);
     localStorage.removeItem('tuneup_user_session');
+    localStorage.removeItem('tuneup_jwt_token');
     setActiveTab('profile');
   };
 
@@ -377,6 +402,8 @@ export default function App() {
         onViewChange={handleSidebarTabChange}
         user={user ? { username: user.username, xp: user.xp, streak: user.streak } : null}
         onLogout={handleLogout}
+        theme={theme}
+        onThemeToggle={toggleTheme}
       />
 
       <div className="main-content">
@@ -481,6 +508,15 @@ export default function App() {
             />
           )}
 
+          {/* Acoustic Pitch Matcher */}
+          {activeTab === 'dashboard' && currentExercise === 'ear-acoustic' && (
+            <AcousticPitchTrainer
+              user={user}
+              onBack={() => { playUIBack(); setCurrentExercise(null); }}
+              onUpdateStats={(pts) => handleUpdateStats(pts)}
+            />
+          )}
+
           {/* B. SANDBOX PLAYGROUND */}
           {activeTab === 'sandbox' && (
             <SandboxPlayground onBack={() => handleSidebarTabChange('dashboard')} />
@@ -500,6 +536,7 @@ export default function App() {
           {/* D. ARENA SIMULATED MULTIPLAYER */}
           {activeTab === 'multiplayer' && (
             <MultiplayerBattle
+              user={user}
               onBack={() => handleSidebarTabChange('dashboard')}
               onUpdateStats={(pts) => handleUpdateStats(pts)}
             />
