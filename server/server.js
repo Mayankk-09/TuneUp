@@ -7,9 +7,9 @@ const path = require('path');
 const nodemailer = require('nodemailer');
 const dotenvResult = require('dotenv').config({ path: path.join(__dirname, '.env') });
 
-if (dotenvResult.error) {
-  console.error('[dotenv] Warning: Failed to load .env file:', dotenvResult.error.message);
-} else {
+if (dotenvResult.error && !process.env.MONGODB_URI) {
+  console.warn('[dotenv] Warning: Failed to load .env file:', dotenvResult.error.message);
+} else if (!dotenvResult.error) {
   console.log('[dotenv] .env configuration file loaded successfully.');
 }
 
