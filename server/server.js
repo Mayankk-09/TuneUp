@@ -160,24 +160,32 @@ app.post('/api/auth/send-otp', async (req, res) => {
     const expiresAt = Date.now() + 5 * 60 * 1000; // 5 mins expiration
     activeOtps.set(email.toLowerCase(), { otp: code, expiresAt });
 
-    const transporter = await getTransporter();
-    const mailOptions = {
-      from: '"TuneUp Lab" <no-reply@tuneup.music>',
-      to: email,
-      subject: 'TuneUp Lab Verification OTP Code',
-      text: `Your TuneUp Lab verification code is: ${code}\n\nIt is valid for 5 minutes. If you did not request this, please ignore this email.`
-    };
+    try {
+      const transporter = await getTransporter();
+      const mailOptions = {
+        from: '"TuneUp Lab" <no-reply@tuneup.music>',
+        to: email,
+        subject: 'TuneUp Lab Verification OTP Code',
+        text: `Your TuneUp Lab verification code is: ${code}\n\nIt is valid for 5 minutes. If you did not request this, please ignore this email.`
+      };
 
-    const info = await transporter.sendMail(mailOptions);
-    if (nodemailer.getTestMessageUrl && info.messageId !== 'mock-id') {
-      console.log(`[SMTP Preview Link] View sent email at: ${nodemailer.getTestMessageUrl(info)}`);
+      const info = await transporter.sendMail(mailOptions);
+      if (nodemailer.getTestMessageUrl && info.messageId !== 'mock-id') {
+        console.log(`[SMTP Preview Link] View sent email at: ${nodemailer.getTestMessageUrl(info)}`);
+      }
+      console.log(`[OTP] Sent email containing code ${code} to ${email}`);
+    } catch (mailErr) {
+      console.error(`[SMTP Warning] Failed to send email to ${email}:`, mailErr.message);
+      console.log(`\n==================================================`);
+      console.log(`[OTP FALLBACK] VERIFICATION CODE FOR ${email}: ${code}`);
+      console.log(`==================================================\n`);
     }
+
     console.log(`[OTP] Generated verification code ${code} for ${email}`);
-    
-    return res.json({ message: 'OTP code sent successfully' });
+    return res.json({ message: 'OTP code generated successfully. Check your inbox (or server logs).' });
   } catch (err) {
-    console.error('Failed to generate or send OTP:', err);
-    return res.status(500).json({ error: 'Failed to send verification code: ' + err.message });
+    console.error('Failed to generate OTP:', err);
+    return res.status(500).json({ error: 'Failed to generate verification code: ' + err.message });
   }
 });
 
