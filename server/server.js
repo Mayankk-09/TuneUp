@@ -5,7 +5,7 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');
 const nodemailer = require('nodemailer');
-require('dotenv').config();
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 const jwt = require('jsonwebtoken');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'tuneup_super_secret_jwt_key_12345';
