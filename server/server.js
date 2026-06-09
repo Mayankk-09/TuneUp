@@ -5,9 +5,15 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');
 const nodemailer = require('nodemailer');
-require('dotenv').config({ path: path.join(__dirname, '.env') });
-const jwt = require('jsonwebtoken');
+const dotenvResult = require('dotenv').config({ path: path.join(__dirname, '.env') });
 
+if (dotenvResult.error) {
+  console.error('[dotenv] Warning: Failed to load .env file:', dotenvResult.error.message);
+} else {
+  console.log('[dotenv] .env configuration file loaded successfully.');
+}
+
+const jwt = require('jsonwebtoken');
 const JWT_SECRET = process.env.JWT_SECRET || 'tuneup_super_secret_jwt_key_12345';
 
 const verifyToken = (req, res, next) => {
@@ -48,6 +54,11 @@ app.use(express.json());
 
 // MongoDB Connection Setup
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/tuneup';
+
+const maskedUri = MONGODB_URI.includes('@')
+  ? MONGODB_URI.replace(/:([^@/:]+)@/, ':****@')
+  : MONGODB_URI;
+console.log(`[Database] Attempting to connect to URI: ${maskedUri}`);
 
 mongoose.set('bufferCommands', false);
 
