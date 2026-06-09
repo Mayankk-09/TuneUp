@@ -17,6 +17,7 @@ import { playUIClick, playUIBack, playIntroChime } from './utils/audioSynth';
 import { FloatingMusicParticles } from './components/FloatingMusicParticles';
 import { Mascot } from './components/Mascot';
 import { getApiUrl } from './utils/api';
+import { useUser, useAuth } from '@clerk/clerk-react';
 
 const BACKGROUND_MUSIC_URL = "/music/background_music.mp3";
 
@@ -91,6 +92,9 @@ export default function App() {
     return () => clearInterval(interval);
   }, [showIntro]);
 
+  const { isLoaded: isClerkLoaded, isSignedIn, getToken, signOut } = useAuth();
+  const { user: clerkUser } = useUser();
+
   // Authenticated user state
   const [user, setUser] = useState<{
     username: string;
@@ -108,31 +112,69 @@ export default function App() {
     masteredChords: [] as string[]
   });
 
-  // Load user session on mount (Note: guest stats localStorage loading is removed)
+  // Load/sync Clerk session details when user signs in
   useEffect(() => {
-    // 2. User session
-    const savedSession = localStorage.getItem('tuneup_user_session');
-    if (savedSession) {
-      try {
-        setUser(JSON.parse(savedSession));
-      } catch (e) {
-        console.error('Failed to load user session:', e);
-      }
+    if (!isClerkLoaded) return;
+
+    if (isSignedIn && clerkUser) {
+      const loadClerkSession = async () => {
+        try {
+          const token = await getToken();
+          const headers: Record<string, string> = {};
+          if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+          }
+
+          const pendingAvatar = localStorage.getItem('tuneup_pending_avatar') || undefined;
+          if (pendingAvatar) {
+            localStorage.removeItem('tuneup_pending_avatar');
+          }
+
+          const res = await fetch(getApiUrl('/api/users/stats'), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...headers
+            },
+            body: JSON.stringify({ avatarId: pendingAvatar })
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            setUser(data.user);
+            localStorage.setItem('tuneup_user_session', JSON.stringify(data.user));
+            
+            // If there were guest stats accumulated, we merge them into the profile
+            if (stats.score > 0 || stats.streak > 0 || stats.masteredChords.length > 0) {
+              await handleLoginSuccess(data.user);
+            }
+          }
+        } catch (err) {
+          console.error('Failed to initialize Clerk session with backend:', err);
+        }
+      };
+
+      loadClerkSession();
+    } else {
+      setUser(null);
+      localStorage.removeItem('tuneup_user_session');
     }
-  }, []);
+  }, [isClerkLoaded, isSignedIn, clerkUser]);
 
   // Synchronize stats with server when updated
   const syncStatsWithServer = async (updatedUser: any) => {
     if (!updatedUser) return;
-    const token = localStorage.getItem('tuneup_jwt_token');
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json'
-    };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
+    if (!isSignedIn) return;
 
     try {
+      const token = await getToken();
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const res = await fetch(getApiUrl('/api/users/stats'), {
         method: 'POST',
         headers,
@@ -271,10 +313,10 @@ export default function App() {
     setActiveTab('dashboard');
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await signOut();
     setUser(null);
     localStorage.removeItem('tuneup_user_session');
-    localStorage.removeItem('tuneup_jwt_token');
     setActiveTab('profile');
   };
 
@@ -542,7 +584,6 @@ export default function App() {
           {activeTab === 'profile' && (
             <Profile
               user={user}
-              onLoginSuccess={handleLoginSuccess}
               onLogout={handleLogout}
             />
           )}

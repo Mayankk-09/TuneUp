@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { ShieldAlert, Award, Calendar, Copy, Check, Info } from 'lucide-react';
 import { playUIClick, playUIBack, playUISuccess } from '../utils/audioSynth';
-import { getApiUrl } from '../utils/api';
+import { useSignIn, useSignUp } from '@clerk/clerk-react';
 
 // 10 Detailed Custom SVG Avatars
 export const AVATARS_DB = [
@@ -199,11 +199,13 @@ interface ProfileProps {
     masteredChords: string[];
     unlockedBadges: string[];
   } | null;
-  onLoginSuccess: (userData: any, token?: string) => void;
   onLogout: () => void;
 }
 
-export const Profile: React.FC<ProfileProps> = ({ user, onLoginSuccess, onLogout }) => {
+export const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
+  const { signIn, isLoaded: isSignInLoaded, setActive: setSignInActive } = useSignIn();
+  const { signUp, isLoaded: isSignUpLoaded, setActive: setSignUpActive } = useSignUp();
+
   const [isLoginTab, setIsLoginTab] = useState(true);
   const [usernameInput, setUsernameInput] = useState('');
   const [emailInput, setEmailInput] = useState('');
@@ -231,26 +233,57 @@ export const Profile: React.FC<ProfileProps> = ({ user, onLoginSuccess, onLogout
       setErrorMsg('Please enter a valid email address!');
       return;
     }
+    if (!isLoginTab && !usernameInput) {
+      setErrorMsg('Username is required for registration!');
+      return;
+    }
+    if (!isSignInLoaded || !isSignUpLoaded) {
+      setErrorMsg('Authentication engine loading... Try again in a second.');
+      return;
+    }
+
     setErrorMsg('');
     setOtpLoading(true);
     setOtpSuccessMsg('');
+
     try {
-      const res = await fetch(getApiUrl('/api/auth/send-otp'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailInput })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to send verification code.');
+      if (isLoginTab) {
+        // Sign In Flow
+        const result = await signIn.create({
+          identifier: emailInput,
+        });
+
+        const emailCodeFactor = result.supportedFirstFactors?.find(
+          (f: any) => f.strategy === 'email_code'
+        ) as any;
+
+        if (!emailCodeFactor) {
+          throw new Error('Email verification is not configured for this sign-in identifier.');
+        }
+
+        await signIn.prepareFirstFactor({
+          strategy: 'email_code',
+          emailAddressId: emailCodeFactor.emailAddressId,
+        });
+      } else {
+        // Sign Up Flow
+        await signUp.create({
+          emailAddress: emailInput,
+          username: usernameInput,
+        });
+
+        await signUp.prepareEmailAddressVerification({
+          strategy: 'email_code',
+        });
       }
+
       playUISuccess();
       setOtpSent(true);
-      setOtpSuccessMsg('Verification code sent! Check your inbox (or console logs).');
+      setOtpSuccessMsg('Verification code sent! Check your email inbox.');
       setTimeout(() => setOtpSuccessMsg(''), 5000);
     } catch (err: any) {
       playUIBack();
-      setErrorMsg(err.message || 'Failed to send verification code.');
+      setErrorMsg(err.errors?.[0]?.message || err.message || 'Failed to send verification code.');
     } finally {
       setOtpLoading(false);
     }
@@ -266,34 +299,64 @@ export const Profile: React.FC<ProfileProps> = ({ user, onLoginSuccess, onLogout
       setErrorMsg('Username is required for registration!');
       return;
     }
+    if (!isSignInLoaded || !isSignUpLoaded) {
+      return;
+    }
 
     setLoading(true);
     setErrorMsg('');
 
     try {
-      const endpoint = isLoginTab ? '/api/auth/login' : '/api/auth/register';
-      const bodyPayload = isLoginTab 
-        ? { email: emailInput, otp: otpInput } 
-        : { username: usernameInput, email: emailInput, otp: otpInput, avatarId: AVATARS_DB[avatarIndex].id };
+      if (isLoginTab) {
+        // Verify OTP for Sign In
+        const completeSignIn = await signIn.attemptFirstFactor({
+          strategy: 'email_code',
+          code: otpInput,
+        });
 
-      // We contact our Express API server (resolved dynamically)
-      const res = await fetch(getApiUrl(endpoint), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(bodyPayload)
-      });
+        if (completeSignIn.status === 'complete') {
+          await setSignInActive({ session: completeSignIn.createdSessionId });
+          playUISuccess();
+        } else {
+          throw new Error(`Sign in status unresolved: ${completeSignIn.status}`);
+        }
+      } else {
+        // Verify OTP for Sign Up
+        const completeSignUp = await signUp.attemptEmailAddressVerification({
+          code: otpInput,
+        });
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || data.message || 'Something went wrong!');
+        if (completeSignUp.status === 'complete') {
+          // Save selected avatar ID to localStorage for the sync handler
+          localStorage.setItem('tuneup_pending_avatar', AVATARS_DB[avatarIndex].id);
+          await setSignUpActive({ session: completeSignUp.createdSessionId });
+          playUISuccess();
+        } else {
+          throw new Error(`Sign up status unresolved: ${completeSignUp.status}`);
+        }
       }
-
-      playUISuccess();
-      onLoginSuccess(data.user, data.token);
     } catch (err: any) {
       playUIBack();
-      setErrorMsg(err.message || 'Network connection failed to backend server.');
+      setErrorMsg(err.errors?.[0]?.message || err.message || 'Verification failed. Check your OTP.');
     } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    if (!isSignInLoaded || !isSignUpLoaded) return;
+    setErrorMsg('');
+    setLoading(true);
+    try {
+      const activeFlow = isLoginTab ? signIn : signUp;
+      await activeFlow.authenticateWithRedirect({
+        strategy: 'oauth_google',
+        redirectUrl: window.location.origin,
+        redirectUrlComplete: window.location.origin,
+      });
+    } catch (err: any) {
+      playUIBack();
+      setErrorMsg(err.errors?.[0]?.message || err.message || 'Google Sign-in failed.');
       setLoading(false);
     }
   };
@@ -603,6 +666,35 @@ Practice your theory on TuneUp Cyberpunk Lab! 🚀`;
               style={{ marginTop: '0.5rem' }}
             >
               {loading ? 'SYNCHRONIZING LAB...' : isLoginTab ? 'LOG IN' : 'REGISTER PROFILE'}
+            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0.25rem 0', color: 'var(--text-muted)', fontSize: '0.75rem', fontFamily: 'var(--font-mono)' }}>
+              - OR -
+            </div>
+
+            <button
+              type="button"
+              onClick={handleGoogleSignIn}
+              disabled={loading}
+              className="game-console-button"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                background: '#4285F4',
+                color: '#fff',
+                border: '2px solid #000',
+                marginTop: '0.25rem'
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M17.64 9.20455C17.64 8.56636 17.5827 7.95273 17.4764 7.36364H9V10.845H13.8436C13.635 11.97 13.0009 12.9232 12.0477 13.5614V15.8195H14.9564C16.6582 14.2527 17.64 11.9455 17.64 9.20455Z" fill="#4285F4"/>
+                <path d="M9 18C11.43 18 13.4673 17.1941 14.9564 15.8195L12.0477 13.5614C11.2418 14.1014 10.2109 14.4205 9 14.4205C6.65591 14.4205 4.67182 12.8373 3.96409 10.71H0.957275V13.0418C2.44636 16.0023 5.49 18 9 18Z" fill="#34A853"/>
+                <path d="M3.96409 10.71C3.78409 10.17 3.68182 9.59318 3.68182 9C3.68182 8.40682 3.78409 7.83 3.96409 7.29V4.95818H0.957275C0.347727 6.17318 0 7.54773 0 9C0 10.4523 0.347727 11.8268 0.957275 13.0418L3.96409 10.71Z" fill="#FBBC05"/>
+                <path d="M9 3.57955C10.3214 3.57955 11.5077 4.03364 12.4405 4.92545L15.0218 2.34409C13.4632 0.891818 11.4259 0 9 0C5.49 0 2.44636 1.99773 0.957275 4.95818L3.96409 7.29C4.67182 5.16273 6.65591 3.57955 9 3.57955Z" fill="#EA4335"/>
+              </svg>
+              CONTINUE WITH GOOGLE
             </button>
 
           </form>

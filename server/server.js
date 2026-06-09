@@ -13,10 +13,13 @@ if (dotenvResult.error && !process.env.MONGODB_URI) {
   console.log('[dotenv] .env configuration file loaded successfully.');
 }
 
-const jwt = require('jsonwebtoken');
-const JWT_SECRET = process.env.JWT_SECRET || 'tuneup_super_secret_jwt_key_12345';
+const { createClerkClient } = require('@clerk/clerk-sdk-node');
 
-const verifyToken = (req, res, next) => {
+const clerkClient = createClerkClient({
+  secretKey: process.env.CLERK_SECRET_KEY || 'sk_test_mock_key_for_local'
+});
+
+const verifyToken = async (req, res, next) => {
   const authHeader = req.headers['authorization'];
   if (!authHeader) {
     return res.status(401).json({ error: 'Access denied. No token provided.' });
@@ -26,11 +29,14 @@ const verifyToken = (req, res, next) => {
     return res.status(401).json({ error: 'Access denied. Malformed token.' });
   }
   try {
-    const verified = jwt.verify(token, JWT_SECRET);
-    req.user = verified;
+    const verified = await clerkClient.verifyToken(token);
+    req.user = {
+      id: verified.sub
+    };
     next();
   } catch (err) {
-    return res.status(403).json({ error: 'Invalid or expired token.' });
+    console.error('[Clerk verifyToken Error]:', err.message);
+    return res.status(403).json({ error: 'Invalid or expired token: ' + err.message });
   }
 };
 
@@ -134,6 +140,7 @@ const isDbConnected = () => mongoose.connection.readyState === 1;
 
 // Schema definition
 const UserSchema = new mongoose.Schema({
+  clerkUserId: { type: String, unique: true, sparse: true },
   username: { type: String, required: true, unique: true },
   email: { type: String, required: true, unique: true },
   password: { type: String, default: '' }, // kept for schema backward compatibility
@@ -360,27 +367,56 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// 3. User Stats: Update Stats
+// 3. User Stats: Update / Sync Stats (with JIT Clerk Account Sync)
 app.post('/api/users/stats', verifyToken, async (req, res) => {
-  const { streak, xp, masteredChords, unlockedBadges } = req.body;
-  const username = req.user.username;
+  const { streak, xp, masteredChords, unlockedBadges, avatarId } = req.body;
+  const clerkUserId = req.user.id;
 
   if (isDbConnected()) {
     try {
-      const user = await User.findOne({ username });
+      let user = await User.findOne({ clerkUserId });
+      
       if (!user) {
-        return res.status(404).json({ error: 'User profile not found' });
+        // Just-in-Time (JIT) profile sync from Clerk
+        try {
+          console.log(`[Clerk JIT] Creating new database user for clerkUserId: ${clerkUserId}`);
+          const clerkUser = await clerkClient.users.getUser(clerkUserId);
+          const email = clerkUser.emailAddresses[0]?.emailAddress;
+          const username = clerkUser.username || email.split('@')[0] || `user_${clerkUserId.substring(5, 10)}`;
+
+          // Check if there is an existing user with this email but no clerkUserId (legacy match)
+          user = await User.findOne({ email: email.toLowerCase() });
+          
+          if (user) {
+            user.clerkUserId = clerkUserId;
+            console.log(`[Clerk JIT] Linked legacy user ${username} to clerkUserId: ${clerkUserId}`);
+          } else {
+            user = new User({
+              clerkUserId,
+              username,
+              email: email.toLowerCase(),
+              xp: xp || 0,
+              streak: streak || 0,
+              masteredChords: masteredChords || [],
+              unlockedBadges: unlockedBadges || [avatarId || 'mic']
+            });
+            console.log(`[Clerk JIT] Created new database profile for user: ${username}`);
+          }
+          await user.save();
+        } catch (clerkErr) {
+          console.error('[Clerk API Error]: Failed to fetch user profile:', clerkErr.message);
+          return res.status(500).json({ error: 'Failed to create user profile: ' + clerkErr.message });
+        }
+      } else {
+        // Sync metrics for existing user
+        user.streak = streak !== undefined ? streak : user.streak;
+        user.xp = xp !== undefined ? xp : user.xp;
+        user.masteredChords = masteredChords !== undefined ? masteredChords : user.masteredChords;
+        user.unlockedBadges = unlockedBadges !== undefined ? unlockedBadges : user.unlockedBadges;
+        await user.save();
       }
 
-      // Sync metrics
-      user.streak = streak !== undefined ? streak : user.streak;
-      user.xp = xp !== undefined ? xp : user.xp;
-      user.masteredChords = masteredChords !== undefined ? masteredChords : user.masteredChords;
-      user.unlockedBadges = unlockedBadges !== undefined ? unlockedBadges : user.unlockedBadges;
-
-      await user.save();
-      console.log(`[DB] Stats synchronized for: ${username} (XP: ${user.xp}, Streak: ${user.streak})`);
-      
+      console.log(`[DB] Stats synchronized for Clerk User: ${user.username} (XP: ${user.xp}, Streak: ${user.streak})`);
       const responseUser = user.toObject();
       delete responseUser.password;
       return res.json({ user: responseUser });
@@ -389,20 +425,46 @@ app.post('/api/users/stats', verifyToken, async (req, res) => {
     }
   } else {
     // In-memory fallback
-    const userIndex = localUsers.findIndex(u => u.username === username);
+    let userIndex = localUsers.findIndex(u => u.clerkUserId === clerkUserId);
+    
     if (userIndex === -1) {
-      return res.status(404).json({ error: 'User profile not found' });
+      console.log(`[In-Memory JIT] Creating new user fallback for clerkUserId: ${clerkUserId}`);
+      // Try to fetch details
+      let email = `clerk_${clerkUserId.substring(5, 10)}@mock.com`;
+      let username = `user_${clerkUserId.substring(5, 10)}`;
+      try {
+        const clerkUser = await clerkClient.users.getUser(clerkUserId);
+        email = clerkUser.emailAddresses[0]?.emailAddress;
+        username = clerkUser.username || email.split('@')[0];
+      } catch (e) {
+        // fallback to mock if clerk Client fails
+      }
+
+      const newUser = {
+        clerkUserId,
+        username,
+        email: email.toLowerCase(),
+        password: '',
+        xp: xp || 0,
+        streak: streak || 0,
+        masteredChords: masteredChords || [],
+        unlockedBadges: unlockedBadges || [avatarId || 'mic'],
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      localUsers.push(newUser);
+      userIndex = localUsers.length - 1;
+    } else {
+      const user = localUsers[userIndex];
+      user.streak = streak !== undefined ? streak : user.streak;
+      user.xp = xp !== undefined ? xp : user.xp;
+      user.masteredChords = masteredChords !== undefined ? masteredChords : user.masteredChords;
+      user.unlockedBadges = unlockedBadges !== undefined ? unlockedBadges : user.unlockedBadges;
+      user.updatedAt = new Date();
     }
 
     const user = localUsers[userIndex];
-    user.streak = streak !== undefined ? streak : user.streak;
-    user.xp = xp !== undefined ? xp : user.xp;
-    user.masteredChords = masteredChords !== undefined ? masteredChords : user.masteredChords;
-    user.unlockedBadges = unlockedBadges !== undefined ? unlockedBadges : user.unlockedBadges;
-    user.updatedAt = new Date();
-
-    console.log(`[In-Memory Fallback] Stats synchronized for: ${username} (XP: ${user.xp}, Streak: ${user.streak})`);
-    
+    console.log(`[In-Memory Fallback] Stats synchronized for: ${user.username} (XP: ${user.xp}, Streak: ${user.streak})`);
     const responseUser = { ...user };
     delete responseUser.password;
     return res.json({ user: responseUser });
