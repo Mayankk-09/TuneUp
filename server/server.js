@@ -29,7 +29,9 @@ const verifyToken = async (req, res, next) => {
     return res.status(401).json({ error: 'Access denied. Malformed token.' });
   }
   try {
-    const verified = await clerkClient.verifyToken(token);
+    const verified = await clerkClient.verifyToken(token, {
+      clockSkewInMs: 600000 // Allow up to 10 minutes of clock skew/tolerance for local dev environment
+    });
     req.user = {
       id: verified.sub
     };
