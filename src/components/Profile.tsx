@@ -343,20 +343,21 @@ export const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
     }
   };
 
-  const handleGoogleSignIn = async () => {
+  const handleOAuthSignIn = async (provider: 'oauth_google' | 'oauth_apple' | 'oauth_facebook') => {
     if (!isSignInLoaded || !isSignUpLoaded) return;
     setErrorMsg('');
     setLoading(true);
     try {
       const activeFlow = isLoginTab ? signIn : signUp;
       await activeFlow.authenticateWithRedirect({
-        strategy: 'oauth_google',
+        strategy: provider,
         redirectUrl: window.location.origin,
         redirectUrlComplete: window.location.origin,
       });
     } catch (err: any) {
       playUIBack();
-      setErrorMsg(err.errors?.[0]?.message || err.message || 'Google Sign-in failed.');
+      const providerName = provider === 'oauth_google' ? 'Google' : provider === 'oauth_apple' ? 'Apple' : 'Facebook';
+      setErrorMsg(err.errors?.[0]?.message || err.message || `${providerName} Sign-in failed.`);
       setLoading(false);
     }
   };
@@ -669,33 +670,88 @@ Practice your theory on TuneUp Cyberpunk Lab! 🚀`;
             </button>
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0.25rem 0', color: 'var(--text-muted)', fontSize: '0.75rem', fontFamily: 'var(--font-mono)' }}>
-              - OR -
+              - OR CONTINUE WITH -
             </div>
 
-            <button
-              type="button"
-              onClick={handleGoogleSignIn}
-              disabled={loading}
-              className="game-console-button"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                background: '#4285F4',
-                color: '#fff',
-                border: '2px solid #000',
-                marginTop: '0.25rem'
-              }}
-            >
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M17.64 9.20455C17.64 8.56636 17.5827 7.95273 17.4764 7.36364H9V10.845H13.8436C13.635 11.97 13.0009 12.9232 12.0477 13.5614V15.8195H14.9564C16.6582 14.2527 17.64 11.9455 17.64 9.20455Z" fill="#4285F4"/>
-                <path d="M9 18C11.43 18 13.4673 17.1941 14.9564 15.8195L12.0477 13.5614C11.2418 14.1014 10.2109 14.4205 9 14.4205C6.65591 14.4205 4.67182 12.8373 3.96409 10.71H0.957275V13.0418C2.44636 16.0023 5.49 18 9 18Z" fill="#34A853"/>
-                <path d="M3.96409 10.71C3.78409 10.17 3.68182 9.59318 3.68182 9C3.68182 8.40682 3.78409 7.83 3.96409 7.29V4.95818H0.957275C0.347727 6.17318 0 7.54773 0 9C0 10.4523 0.347727 11.8268 0.957275 13.0418L3.96409 10.71Z" fill="#FBBC05"/>
-                <path d="M9 3.57955C10.3214 3.57955 11.5077 4.03364 12.4405 4.92545L15.0218 2.34409C13.4632 0.891818 11.4259 0 9 0C5.49 0 2.44636 1.99773 0.957275 4.95818L3.96409 7.29C4.67182 5.16273 6.65591 3.57955 9 3.57955Z" fill="#EA4335"/>
-              </svg>
-              CONTINUE WITH GOOGLE
-            </button>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem', marginTop: '0.25rem' }}>
+              <button
+                type="button"
+                onClick={() => handleOAuthSignIn('oauth_google')}
+                disabled={loading}
+                className="game-console-button"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  background: '#4285F4',
+                  color: '#fff',
+                  border: '2px solid #000',
+                  padding: '0.7rem 0.25rem',
+                  fontSize: '0.72rem',
+                  fontWeight: 'bold',
+                  borderRadius: '8px'
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M17.64 9.20455C17.64 8.56636 17.5827 7.95273 17.4764 7.36364H9V10.845H13.8436C13.635 11.97 13.0009 12.9232 12.0477 13.5614V15.8195H14.9564C16.6582 14.2527 17.64 11.9455 17.64 9.20455Z" fill="#4285F4"/>
+                  <path d="M9 18C11.43 18 13.4673 17.1941 14.9564 15.8195L12.0477 13.5614C11.2418 14.1014 10.2109 14.4205 9 14.4205C6.65591 14.4205 4.67182 12.8373 3.96409 10.71H0.957275V13.0418C2.44636 16.0023 5.49 18 9 18Z" fill="#34A853"/>
+                  <path d="M3.96409 10.71C3.78409 10.17 3.68182 9.59318 3.68182 9C3.68182 8.40682 3.78409 7.83 3.96409 7.29V4.95818H0.957275C0.347727 6.17318 0 7.54773 0 9C0 10.4523 0.347727 11.8268 0.957275 13.0418L3.96409 10.71Z" fill="#FBBC05"/>
+                  <path d="M9 3.57955C10.3214 3.57955 11.5077 4.03364 12.4405 4.92545L15.0218 2.34409C13.4632 0.891818 11.4259 0 9 0C5.49 0 2.44636 1.99773 0.957275 4.95818L3.96409 7.29C4.67182 5.16273 6.65591 3.57955 9 3.57955Z" fill="#EA4335"/>
+                </svg>
+                GOOGLE
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleOAuthSignIn('oauth_apple')}
+                disabled={loading}
+                className="game-console-button"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  background: '#000000',
+                  color: '#fff',
+                  border: '2px solid #000',
+                  padding: '0.7rem 0.25rem',
+                  fontSize: '0.72rem',
+                  fontWeight: 'bold',
+                  borderRadius: '8px'
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.93.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.783 1.09zm2.662-4.104c.87-1.066 1.455-2.533 1.287-4-1.26.052-2.793.844-3.688 1.896-.805.935-1.507 2.416-1.313 3.87 1.403.104 2.844-.7 3.714-1.766z"/>
+                </svg>
+                APPLE
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleOAuthSignIn('oauth_facebook')}
+                disabled={loading}
+                className="game-console-button"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  background: '#1877F2',
+                  color: '#fff',
+                  border: '2px solid #000',
+                  padding: '0.7rem 0.25rem',
+                  fontSize: '0.72rem',
+                  fontWeight: 'bold',
+                  borderRadius: '8px'
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                </svg>
+                FACEBOOK
+              </button>
+            </div>
 
           </form>
 
