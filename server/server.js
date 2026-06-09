@@ -161,19 +161,43 @@ app.post('/api/auth/send-otp', async (req, res) => {
     activeOtps.set(email.toLowerCase(), { otp: code, expiresAt });
 
     try {
-      const transporter = await getTransporter();
-      const mailOptions = {
-        from: '"TuneUp Lab" <no-reply@tuneup.music>',
-        to: email,
-        subject: 'TuneUp Lab Verification OTP Code',
-        text: `Your TuneUp Lab verification code is: ${code}\n\nIt is valid for 5 minutes. If you did not request this, please ignore this email.`
-      };
+      if (process.env.RESEND_API_KEY) {
+        // Send via Resend HTTP API (Secure, reliable, never blocked by cloud hosts)
+        const resendResponse = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            from: 'TuneUp Lab <onboarding@resend.dev>', // Free test sender
+            to: email,
+            subject: 'TuneUp Lab Verification OTP Code',
+            text: `Your TuneUp Lab verification code is: ${code}\n\nIt is valid for 5 minutes. If you did not request this, please ignore this email.`
+          })
+        });
 
-      const info = await transporter.sendMail(mailOptions);
-      if (nodemailer.getTestMessageUrl && info.messageId !== 'mock-id') {
-        console.log(`[SMTP Preview Link] View sent email at: ${nodemailer.getTestMessageUrl(info)}`);
+        if (!resendResponse.ok) {
+          const resendError = await resendResponse.json();
+          throw new Error(resendError.message || 'Resend API returned an error status.');
+        }
+        console.log(`[OTP] Sent email containing code ${code} to ${email} via Resend HTTP API`);
+      } else {
+        // Fallback to Nodemailer SMTP
+        const transporter = await getTransporter();
+        const mailOptions = {
+          from: '"TuneUp Lab" <no-reply@tuneup.music>',
+          to: email,
+          subject: 'TuneUp Lab Verification OTP Code',
+          text: `Your TuneUp Lab verification code is: ${code}\n\nIt is valid for 5 minutes. If you did not request this, please ignore this email.`
+        };
+
+        const info = await transporter.sendMail(mailOptions);
+        if (nodemailer.getTestMessageUrl && info.messageId !== 'mock-id') {
+          console.log(`[SMTP Preview Link] View sent email at: ${nodemailer.getTestMessageUrl(info)}`);
+        }
+        console.log(`[OTP] Sent email containing code ${code} to ${email} via SMTP`);
       }
-      console.log(`[OTP] Sent email containing code ${code} to ${email}`);
     } catch (mailErr) {
       console.error(`[SMTP Warning] Failed to send email to ${email}:`, mailErr.message);
       console.log(`\n==================================================`);
