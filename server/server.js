@@ -170,7 +170,7 @@ app.post('/api/auth/send-otp', async (req, res) => {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            from: 'TuneUp Lab <onboarding@resend.dev>', // Free test sender
+            from: process.env.RESEND_FROM_EMAIL || 'TuneUp Lab <onboarding@resend.dev>',
             to: email,
             subject: 'TuneUp Lab Verification OTP Code',
             text: `Your TuneUp Lab verification code is: ${code}\n\nIt is valid for 5 minutes. If you did not request this, please ignore this email.`
