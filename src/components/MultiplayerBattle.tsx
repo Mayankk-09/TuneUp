@@ -5,6 +5,7 @@ import { Swords, Heart, Trophy, Zap, Loader2, ShieldAlert } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 import { playUIClick, playUIBack, playUISuccess, playUIFailure } from '../utils/audioSynth';
 import { getChordNotes, CHORD_FORMULAS, getScaleNotes, SCALE_FORMULAS } from '../utils/musicEngine';
+import { getSocketUrl } from '../utils/api';
 
 interface MultiplayerBattleProps {
   user: { username: string; unlockedBadges: string[] } | null;
@@ -102,7 +103,7 @@ export const MultiplayerBattle: React.FC<MultiplayerBattleProps> = ({ user, onBa
 
     // Initialize socket connection
     if (!socketRef.current) {
-      socketRef.current = io('https://tuneup-fb4s.onrender.com/', {
+      socketRef.current = io(getSocketUrl(), {
         transports: ['websocket'],
         timeout: 5000
       });

@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { ShieldAlert, Award, Calendar, Copy, Check, Info } from 'lucide-react';
 import { playUIClick, playUIBack, playUISuccess } from '../utils/audioSynth';
+import { getApiUrl } from '../utils/api';
 
 // 10 Detailed Custom SVG Avatars
 export const AVATARS_DB = [
@@ -234,7 +235,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, onLoginSuccess, onLogout
     setOtpLoading(true);
     setOtpSuccessMsg('');
     try {
-      const res = await fetch('https://tuneup-fb4s.onrender.com//api/auth/send-otp', {
+      const res = await fetch(getApiUrl('/api/auth/send-otp'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: emailInput })
@@ -275,8 +276,8 @@ export const Profile: React.FC<ProfileProps> = ({ user, onLoginSuccess, onLogout
         ? { email: emailInput, otp: otpInput } 
         : { username: usernameInput, email: emailInput, otp: otpInput, avatarId: AVATARS_DB[avatarIndex].id };
 
-      // We contact our Express API server (usually running on port 5000)
-      const res = await fetch(`http://localhost:5000${endpoint}`, {
+      // We contact our Express API server (resolved dynamically)
+      const res = await fetch(getApiUrl(endpoint), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bodyPayload)

@@ -41,7 +41,7 @@ export const TheoryExercises: React.FC<TheoryExercisesProps> = ({
 
   // Active question state
   const [questions, setQuestions] = useState<Question[]>([]);
-  const [question, setQuestion] = useState<Question | null>(null);
+  const question = questions[questionIndex] || null;
   const [userSpelledNotes, setUserSpelledNotes] = useState<string[]>([]); // For note spelling
   const [answerStatus, setAnswerStatus] = useState<'unanswered' | 'correct' | 'incorrect'>('unanswered');
   const [clickedOption, setClickedOption] = useState<string>('');
@@ -264,7 +264,6 @@ export const TheoryExercises: React.FC<TheoryExercisesProps> = ({
       }
     }
     setQuestions(pool);
-    setQuestion(pool[0]);
   };
 
   useEffect(() => {
@@ -299,7 +298,6 @@ export const TheoryExercises: React.FC<TheoryExercisesProps> = ({
     setTimeout(() => {
       if (questionIndex + 1 < questions.length) {
         setQuestionIndex(prev => prev + 1);
-        setQuestion(questions[questionIndex + 1]);
         setAnswerStatus('unanswered');
         setClickedOption('');
         setUserSpelledNotes([]);
@@ -364,7 +362,6 @@ export const TheoryExercises: React.FC<TheoryExercisesProps> = ({
     setTimeout(() => {
       if (questionIndex + 1 < questions.length) {
         setQuestionIndex(prev => prev + 1);
-        setQuestion(questions[questionIndex + 1]);
         setAnswerStatus('unanswered');
         setClickedOption('');
         setUserSpelledNotes([]);

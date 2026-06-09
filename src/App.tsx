@@ -16,6 +16,7 @@ import { AcousticPitchTrainer } from './components/AcousticPitchTrainer';
 import { playUIClick, playUIBack, playIntroChime } from './utils/audioSynth';
 import { FloatingMusicParticles } from './components/FloatingMusicParticles';
 import { Mascot } from './components/Mascot';
+import { getApiUrl } from './utils/api';
 
 const BACKGROUND_MUSIC_URL = "/music/background_music.mp3";
 
@@ -132,7 +133,7 @@ export default function App() {
     }
 
     try {
-      const res = await fetch('https://tuneup-fb4s.onrender.com//api/users/stats', {
+      const res = await fetch(getApiUrl('/api/users/stats'), {
         method: 'POST',
         headers,
         body: JSON.stringify({
