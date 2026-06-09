@@ -1,12 +1,17 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ClerkProvider } from '@clerk/clerk-react'
-import { SpeedInsights } from "@vercel/speed-insights/react"
-import { Analytics } from "@vercel/analytics/react"
+import { initGA } from './utils/analytics'
 import './index.css'
 import App from './App.tsx'
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || 'pk_test_ZGV2b3RlZC1zd2FuLTIzLmNsZXJrLmFjY291bnRzLmRldiQ';
+const GA_MEASUREMENT_ID = import.meta.env.VITE_GA_MEASUREMENT_ID || '';
+
+// Initialize Google Analytics if ID is provided
+if (GA_MEASUREMENT_ID) {
+  initGA(GA_MEASUREMENT_ID);
+}
 
 if (!PUBLISHABLE_KEY) {
   createRoot(document.getElementById('root')!).render(
@@ -78,8 +83,6 @@ if (!PUBLISHABLE_KEY) {
       <ClerkProvider publishableKey={PUBLISHABLE_KEY}>
         <App />
       </ClerkProvider>
-      <Analytics />
-      <SpeedInsights />
     </StrictMode>,
   )
 }

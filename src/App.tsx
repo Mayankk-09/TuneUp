@@ -18,6 +18,7 @@ import { FloatingMusicParticles } from './components/FloatingMusicParticles';
 import { Mascot } from './components/Mascot';
 import { getApiUrl } from './utils/api';
 import { useUser, useAuth } from '@clerk/clerk-react';
+import { trackPageView } from './utils/analytics';
 
 const BACKGROUND_MUSIC_URL = "/music/background_music.mp3";
 
@@ -38,6 +39,11 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('tuneup_theme', theme);
   }, [theme]);
+
+  // Track page view in GA when the user switches tabs
+  useEffect(() => {
+    trackPageView(`/${activeTab}`);
+  }, [activeTab]);
 
   const toggleTheme = () => {
     setTheme(prev => (prev === 'light' ? 'dark' : 'light'));
