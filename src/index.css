@@ -36,37 +36,35 @@
 }
 
 [data-theme='light'] {
-  /* Day Theme custom palette - Premium Warm Music Notebook */
-  --bg: #f8f6f0;          /* Warm cream/off-white (40%) */
-  --surface: #ffffff;     /* Pure white (40%) - card surface */
-  --card: #ffffff;        /* Pure white (40%) - inner cards */
-  --bg-deep: #eae6db;     /* Deep cream/warm slate */
-  --bg-panel: #ffffff;
-  --border-dark: #1e293b; /* Muted dark slate border for neobrutalism */
+  /* Day Theme custom palette - Warm Sand & Sage Green */
+  --bg: #F5F5F0;          /* Warm Off-White (rgb 245, 245, 240) */
+  --surface: #E6D8C3;     /* Warm Sand/Beige (rgb 230, 216, 195) */
+  --card: #E6D8C3;        /* Warm Sand/Beige (rgb 230, 216, 195) */
+  --bg-deep: #C2A68C;     /* Medium Tan/Caramel (rgb 194, 166, 140) */
+  --bg-panel: #E6D8C3;
+  --border-dark: #2e251e; /* High contrast dark brown for neobrutalist borders */
 
-  /* Keep the Purple & Cyan branding identity (30%) */
-  --primary: #6366f1;     /* Violet/Indigo */
-  --secondary: #0ea5e9;   /* Sky Cyan */
-  --success: #10b981;     /* Emerald Green */
+  /* Sage Green & Tan branding identity */
+  --primary: #5D866C;     /* Sage Green (rgb 93, 134, 108) */
+  --secondary: #C2A68C;   /* Tan/Caramel */
+  --success: #5D866C;     /* Sage Green */
   
-  --neon-primary: #6366f1;
-  --neon-secondary: #0ea5e9;
-  --neon-success: #10b981;
-  --neon-purple: #6366f1;
-  --neon-cyan: #0ea5e9;
+  --neon-primary: #5D866C;
+  --neon-secondary: #C2A68C;
+  --neon-success: #5D866C;
+  --neon-purple: #5D866C;
+  --neon-cyan: #C2A68C;
 
-  /* Warm Accent highlights (20%) */
-  --neon-yellow: #d97706;  /* Amber 600 */
-  --neon-highlight: #f43f5e; /* Rose 500 */
-
-  /* Streak & warnings (10%) */
-  --neon-orange: #f97316;  /* Orange 500 */
-  --neon-magenta: #ec4899; /* Pink 500 */
-  --neon-danger: #ef4444;  /* Red 500 */
+  /* Accent highlights */
+  --neon-yellow: #C2A68C;    /* Tan */
+  --neon-highlight: #5D866C; /* Sage Green */
+  --neon-orange: #a16207;    /* Dark Amber */
+  --neon-magenta: #c25959;   /* Muted Rose */
+  --neon-danger: #b91c1c;    /* Deep Red */
 
   /* Dark texts */
-  --text-light: #0f172a;  /* slate-900 */
-  --text-muted: #475569;  /* slate-600 */
+  --text-light: #2e251e;  /* Dark charcoal brown */
+  --text-muted: #635b51;  /* Muted warm brown */
 }
 
 /* Light mode structural overrides */
