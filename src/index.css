@@ -36,35 +36,35 @@
 }
 
 [data-theme='light'] {
-  /* Day Theme custom palette - Warm Sand & Sage Green */
-  --bg: #F5F5F0;          /* Warm Off-White (rgb 245, 245, 240) */
-  --surface: #E6D8C3;     /* Warm Sand/Beige (rgb 230, 216, 195) */
-  --card: #E6D8C3;        /* Warm Sand/Beige (rgb 230, 216, 195) */
-  --bg-deep: #C2A68C;     /* Medium Tan/Caramel (rgb 194, 166, 140) */
-  --bg-panel: #E6D8C3;
-  --border-dark: #2e251e; /* High contrast dark brown for neobrutalist borders */
+  /* Day Theme custom palette - Cool Ice Blue & Slate */
+  --bg: #F8FAFC;          /* Clean Slate Off-White (rgb 248, 250, 252) */
+  --surface: #D9EAFD;     /* Soft Ice Blue (rgb 217, 234, 253) */
+  --card: #D9EAFD;        /* Soft Ice Blue (rgb 217, 234, 253) */
+  --bg-deep: #BCCCDC;     /* Cool Blue-Grey (rgb 188, 204, 220) */
+  --bg-panel: #D9EAFD;
+  --border-dark: #1e293b; /* Dark slate-800 border for neobrutalist outlines */
 
-  /* Sage Green & Tan branding identity */
-  --primary: #5D866C;     /* Sage Green (rgb 93, 134, 108) */
-  --secondary: #C2A68C;   /* Tan/Caramel */
-  --success: #5D866C;     /* Sage Green */
+  /* Cool Slate branding accents */
+  --primary: #475569;     /* Slate-600 (Dark Cool Grey) */
+  --secondary: #9AA6B2;   /* Slate-400 (Medium Slate - rgb 154, 166, 178) */
+  --success: #334155;     /* Slate-700 */
   
-  --neon-primary: #5D866C;
-  --neon-secondary: #C2A68C;
-  --neon-success: #5D866C;
-  --neon-purple: #5D866C;
-  --neon-cyan: #C2A68C;
+  --neon-primary: #475569;
+  --neon-secondary: #9AA6B2;
+  --neon-success: #334155;
+  --neon-purple: #475569;
+  --neon-cyan: #9AA6B2;
 
-  /* Accent highlights */
-  --neon-yellow: #C2A68C;    /* Tan */
-  --neon-highlight: #5D866C; /* Sage Green */
-  --neon-orange: #a16207;    /* Dark Amber */
-  --neon-magenta: #c25959;   /* Muted Rose */
-  --neon-danger: #b91c1c;    /* Deep Red */
+  /* Accent highlights matching the cool palette */
+  --neon-yellow: #9AA6B2;    /* Medium Slate */
+  --neon-highlight: #475569; /* Slate */
+  --neon-orange: #64748b;    /* Slate-500 */
+  --neon-magenta: #475569;
+  --neon-danger: #9f1239;    /* Rose-800 */
 
   /* Dark texts */
-  --text-light: #2e251e;  /* Dark charcoal brown */
-  --text-muted: #635b51;  /* Muted warm brown */
+  --text-light: #0f172a;  /* slate-900 */
+  --text-muted: #334155;  /* slate-700 */
 }
 
 /* Light mode structural overrides */
