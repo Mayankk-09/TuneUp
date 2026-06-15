@@ -36,32 +36,32 @@
 }
 
 [data-theme='light'] {
-  /* Day Theme custom palette */
-  --bg: #f8fafc;          /* White (40%) - clean background slate-50 */
-  --surface: #ffffff;     /* White (40%) - card surface */
-  --card: #ffffff;        /* White (40%) - inner cards */
-  --bg-deep: #e2e8f0;     /* slate-200 */
+  /* Day Theme custom palette - Premium Warm Music Notebook */
+  --bg: #f8f6f0;          /* Warm cream/off-white (40%) */
+  --surface: #ffffff;     /* Pure white (40%) - card surface */
+  --card: #ffffff;        /* Pure white (40%) - inner cards */
+  --bg-deep: #eae6db;     /* Deep cream/warm slate */
   --bg-panel: #ffffff;
-  --border-dark: #0f172a; /* slate-900 sharp dark border for neobrutalism */
+  --border-dark: #1e293b; /* Muted dark slate border for neobrutalism */
 
-  /* 30% Green accents */
-  --primary: #16a34a;     /* Green 600 */
-  --secondary: #22c55e;   /* Green 500 */
-  --success: #15803d;     /* Green 700 */
+  /* Keep the Purple & Cyan branding identity (30%) */
+  --primary: #6366f1;     /* Violet/Indigo */
+  --secondary: #0ea5e9;   /* Sky Cyan */
+  --success: #10b981;     /* Emerald Green */
   
-  --neon-primary: #16a34a;
-  --neon-secondary: #22c55e;
-  --neon-success: #15803d;
-  --neon-purple: #16a34a;
-  --neon-cyan: #059669;
+  --neon-primary: #6366f1;
+  --neon-secondary: #0ea5e9;
+  --neon-success: #10b981;
+  --neon-purple: #6366f1;
+  --neon-cyan: #0ea5e9;
 
-  /* 20% Yellow accent highlights */
-  --neon-yellow: #eab308;  /* Yellow 500 */
-  --neon-highlight: #facc15; /* Yellow 400 */
+  /* Warm Accent highlights (20%) */
+  --neon-yellow: #d97706;  /* Amber 600 */
+  --neon-highlight: #f43f5e; /* Rose 500 */
 
-  /* 10% Orange warning highlights & streaks */
+  /* Streak & warnings (10%) */
   --neon-orange: #f97316;  /* Orange 500 */
-  --neon-magenta: #f97316;
+  --neon-magenta: #ec4899; /* Pink 500 */
   --neon-danger: #ef4444;  /* Red 500 */
 
   /* Dark texts */

@@ -40,24 +40,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <aside className="cyber-sidebar">
       {/* Brand logo */}
       <div className="brand-logo" style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', overflow: 'hidden' }}>
-        <div style={{
-          width: '38px',
-          height: '38px',
-          borderRadius: '8px',
-          background: 'linear-gradient(135deg, var(--primary) 0%, #a78bfa 100%)',
-          boxShadow: '0 0 12px rgba(124, 92, 255, 0.4)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontWeight: 900,
-          fontSize: '1.4rem',
-          color: '#fff',
-          flexShrink: 0
-        }}>
-          T
-        </div>
+        <svg width="34" height="34" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ animation: 'rotateAnimation 6s linear infinite', flexShrink: 0 }}>
+          <circle cx="16" cy="16" r="14" fill="#0f172a" stroke="var(--primary)" strokeWidth="2.5" />
+          <circle cx="16" cy="16" r="10" stroke="rgba(255, 255, 255, 0.15)" strokeWidth="1" />
+          <circle cx="16" cy="16" r="7" stroke="rgba(255, 255, 255, 0.15)" strokeWidth="1" />
+          <circle cx="16" cy="16" r="4" fill="var(--secondary)" />
+          <circle cx="16" cy="16" r="1.5" fill="#fff" />
+        </svg>
         <span className="label" style={{ fontSize: '1.5rem', fontWeight: 900, letterSpacing: '-0.5px', color: 'var(--text-light)' }}>
-          une<span style={{ color: 'var(--primary)' }}>Up</span>
+          Tune<span style={{ color: 'var(--primary)' }}>Up</span>
         </span>
       </div>
 

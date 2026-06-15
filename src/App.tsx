@@ -1,7 +1,7 @@
 // App.tsx - Main Controller and Layout Orchestrator for TuneUp
 
 import { useState, useEffect } from 'react';
-import { Music, RefreshCw, Zap, Award } from 'lucide-react';
+import { Music, RefreshCw, Zap, Award, Volume2, VolumeX } from 'lucide-react';
 import { Dashboard } from './components/Dashboard';
 import { TheoryExercises } from './components/TheoryExercises';
 import { InstrumentExercises } from './components/InstrumentExercises';
@@ -54,12 +54,31 @@ export default function App() {
   const [loadingProgress, setLoadingProgress] = useState(0);
 
   // Background Music state/ref
+  const [bgMusicVolume, setBgMusicVolume] = useState<number>(0.15);
+  const [isMuted, setIsMuted] = useState<boolean>(false);
+
   const [bgAudio] = useState(() => {
     const audio = new Audio();
     audio.loop = true;
     audio.volume = 0.15; // Set volume lower than standard sound effects
     return audio;
   });
+
+  useEffect(() => {
+    bgAudio.volume = isMuted ? 0 : bgMusicVolume;
+  }, [bgMusicVolume, isMuted, bgAudio]);
+
+  const toggleMuteMusic = () => {
+    setIsMuted(prev => !prev);
+  };
+
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const vol = parseFloat(e.target.value);
+    setBgMusicVolume(vol);
+    if (vol > 0 && isMuted) {
+      setIsMuted(false);
+    }
+  };
 
   useEffect(() => {
     if (!BACKGROUND_MUSIC_URL) return;
@@ -123,6 +142,23 @@ export default function App() {
     if (!isClerkLoaded) return;
 
     if (isSignedIn && clerkUser) {
+      // If we don't have user state loaded yet, check if there is a cached session in localStorage,
+      // or initialize a temporary placeholder using clerkUser details so the UI responds instantly
+      const cached = localStorage.getItem('tuneup_user_session');
+      if (cached) {
+        try {
+          setUser(JSON.parse(cached));
+        } catch (e) {}
+      } else if (!user) {
+        setUser({
+          username: clerkUser.username || clerkUser.emailAddresses[0]?.emailAddress.split('@')[0] || 'Tuner',
+          xp: 0,
+          streak: 0,
+          masteredChords: [],
+          unlockedBadges: ['mic']
+        });
+      }
+
       const loadClerkSession = async () => {
         try {
           const token = await getToken();
@@ -453,14 +489,69 @@ export default function App() {
       <div className="main-content">
         {/* Top Header */}
         <header className="flex-between" style={{ marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Music size={24} style={{ color: 'var(--primary)', animation: 'pulse 1.5s infinite alternate' }} />
-            <h1 style={{ fontSize: '1.75rem', fontWeight: 900 }}>
-              TuneUp
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ animation: 'rotateAnimation 6s linear infinite', flexShrink: 0 }}>
+              <circle cx="16" cy="16" r="14" fill="#0f172a" stroke="var(--primary)" strokeWidth="2.5" />
+              <circle cx="16" cy="16" r="10" stroke="rgba(255, 255, 255, 0.15)" strokeWidth="1" />
+              <circle cx="16" cy="16" r="7" stroke="rgba(255, 255, 255, 0.15)" strokeWidth="1" />
+              <circle cx="16" cy="16" r="4" fill="var(--secondary)" />
+              <circle cx="16" cy="16" r="1.5" fill="#fff" />
+            </svg>
+            <h1 style={{ fontSize: '1.75rem', fontWeight: 900, letterSpacing: '-0.5px' }}>
+              Tune<span style={{ color: 'var(--primary)' }}>Up</span>
             </h1>
           </div>
 
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            {/* Background Music Widget */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              background: 'rgba(255, 255, 255, 0.04)',
+              border: '1.5px solid var(--border-dark)',
+              borderRadius: '20px',
+              padding: '6px 12px',
+              fontSize: '0.75rem',
+              color: 'var(--text-light)',
+              fontFamily: 'var(--font-mono)',
+              boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.03)'
+            }}>
+              <button
+                onClick={toggleMuteMusic}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: isMuted ? 'var(--neon-danger)' : 'var(--primary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: 0
+                }}
+                title={isMuted ? "Unmute BGM" : "Mute BGM"}
+              >
+                {isMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
+              </button>
+              <input
+                type="range"
+                min="0"
+                max="0.5"
+                step="0.01"
+                value={isMuted ? 0 : bgMusicVolume}
+                onChange={handleVolumeChange}
+                style={{
+                  width: '55px',
+                  height: '4px',
+                  cursor: 'pointer',
+                  accentColor: 'var(--primary)',
+                  background: 'rgba(255, 255, 255, 0.15)',
+                  borderRadius: '2px',
+                  border: 'none',
+                  outline: 'none'
+                }}
+              />
+            </div>
+
             {/* Guest alert if not authenticated */}
             {!user && activeTab !== 'profile' && (
               <span 
