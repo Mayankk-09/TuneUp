@@ -19,6 +19,7 @@ import { Mascot } from './components/Mascot';
 import { getApiUrl } from './utils/api';
 import { useUser, useAuth } from '@clerk/clerk-react';
 import { trackPageView } from './utils/analytics';
+import { Analytics } from '@vercel/analytics/react';
 
 const BACKGROUND_MUSIC_URL = "/music/background_music.mp3";
 
@@ -834,6 +835,7 @@ export default function App() {
           </div>
         </div>
       )}
+      <Analytics />
     </div>
   );
 }
